@@ -80,16 +80,19 @@ public:
 
 signals:
     void stateChanged(ConnectionState newState);
-    void audioDataReceived(const QByteArray& pcmData);  // PCM 数据回调
     void deviceNameChanged(const QString& name);
+    // 注意：不提供 PCM 数据回调。BT 音频由 Windows 自动播放在系统端点上，
+    // AudioEngine 通过 WASAPI Loopback Capture 从该端点捕获。
 };
 ```
 
 **实现要点：**
-- 基于 `AudioPlaybackConnector` 开源项目的 WinRT API 调用方式
-- 使用 `Windows::Media::Audio` 命名空间接收解码后的 PCM 数据
+- 基于 `AudioPlaybackConnection` WinRT API（Win10 2004+ 原生支持）
+- 使用 `DeviceWatcher` + `GetDeviceSelector()` 发现 BT 设备
+- `TryCreateFromId` → `StartAsync` → `OpenAsync` 建立连接
+- **不直接接收 PCM 数据** — Windows 自动将 BT 音频路由到系统默认播放端点
+- AudioEngine 通过 WASAPI Loopback Capture 从该端点间接捕获 BT 音频
 - 蓝牙断开后自动进入 `Reconnecting` 状态，持续监听重连
-- 收到的 PCM 数据通过信号转发给 AudioEngine
 
 ### 3.2 设备枚举模块 (DeviceEnumerator)
 
@@ -142,8 +145,8 @@ public:
     void stop();
     bool isRunning() const;
 
-    // 蓝牙音频输入（由 BluetoothManager 调用）
-    void pushBluetoothAudio(const QByteArray& pcmData);
+    // 设备设置
+    void setLoopbackDevice(const QString& deviceId);  // BT 音频播放端点（Loopback 捕获源）
 
     // 音量控制
     void setPhoneVolume(float gain);    // 0.0 ~ 2.0
@@ -161,14 +164,18 @@ private:
 };
 ```
 
-**内部数据流：**
+**内部数据流（修正版 — Loopback Capture 模型）：**
 
 ```
-蓝牙 PCM ──→ RingBuffer ──┬──→ 增益调节 ──→ 路由 A (耳机直出)
-                           │
-                           ├──→ 增益 × 混入比例 ──┐
-                           │                       ├──→ 混音 ──→ 路由 B (VB-Cable)
-麦克风 WASAPI ──→ 增益调节 ──────────────────────┘
+iPhone --BT A2DP--> AudioPlaybackConnection --> Windows 自动播放在监听端点
+                                                          |
+        AudioEngine: WASAPI Loopback Capture on 监听端点 --+
+                                                           |
+                              +--> 路由 A: 自动完成（BT 音频已在耳机播放）
+                              |
+                              ├──→ 增益 × 混入比例 ──┐
+                              │                       ├──→ 混音 ──→ 路由 B (VB-Cable)
+麦克风: WASAPI Capture ──→ 增益调节 ────────────────┘
 ```
 
 **实现要点：**
