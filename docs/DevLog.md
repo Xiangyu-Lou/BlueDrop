@@ -1,5 +1,79 @@
 # BlueDrop 开发日志
 
+## 2026-03-25 - v0.1.2 发布
+
+### 新增功能
+
+#### 最小化到托盘 + 关闭行为对话框
+- 首次点击关闭按钮弹出对话框，让用户选择"最小化到托盘"或"退出程序"
+- 可勾选"记住该选择"，下次直接执行，不再询问
+- 选择通过 `QSettings` 保存至 `behavior/closeAction`
+- 新增 `TrayManager` 类（`src/app/TrayManager.h/cpp`）：
+  - 系统托盘图标（蓝色圆形，QPainter 绘制）
+  - 右键菜单：显示窗口 / 增益模式开关（可勾选）/ 退出
+
+#### 增益模式退出修复（重要 Bug Fix）
+- **问题：** 增益模式开启时直接关闭应用，系统默认播放设备会停留在 VB-Cable 上，导致电脑完全没有声音
+- **根因：** 应用退出前未恢复原始系统默认端点
+- **修复：** `MixerVM::~MixerVM()` 析构时若增益已启用，自动停止 boost 并调用 `SessionVolumeController::setDefaultPlaybackEndpoint` 恢复原端点
+- MixerVM 在 `main.cpp` 栈上分配，`app.exec()` 返回后必然被析构
+
+#### 状态持久化
+通过 `QSettings` 记忆以下状态，下次启动自动恢复：
+| 设置项 | Key | 默认值 |
+|--------|-----|--------|
+| 增益模式开关 | `boost/enabled` | false |
+| 增益倍数 | `boost/gain` | 1.0 |
+| 增益静音 | `boost/muted` | false |
+| 监听音量 | `monitor/volume` | 1.0 |
+| 监听静音 | `monitor/muted` | false |
+| 关闭行为 | `behavior/closeAction` | "" (每次询问) |
+
+- 启动后 200ms 由 QML `Timer` 触发 `mixerVM.autoRestoreState()`，延迟加载确保 QML 加载完毕后再恢复状态
+- 修复 `sessionFound` 处理逻辑：原来会读取会话当前音量覆盖用户设置，改为将已保存音量 *应用到* 会话
+
+#### UI 改进
+- **帮助页面**：新增 `HelpPage.qml`，包含 4 步操作引导 + 增益模式说明 + 广播混音说明
+- **增益模式 "?" 提示**：增益开关旁新增问号按钮，悬停显示 ToolTip 说明延迟和卡顿风险
+- **VB-Cable 未安装提示**：增益区域在未安装 VB-Cable 时显示"下载安装"按钮（`Qt.openUrlExternally`）
+- **麦克风跟随系统默认**：麦克风下拉框新增"跟随系统默认"作为第一项（默认选中）
+- **移除无效的输出设备选择器**：本地音频路由始终跟随 Windows 系统默认端点，选择器对 Route-A 无效，已从 HomePage 和 BroadcastPage 移除
+
+### Bug 修复
+
+1. **增益模式静音按钮失效**
+   - 原因：增益 Slider 的 `muted` 绑定硬编码为 `false`，未连接到 ViewModel
+   - 修复：MixerVM 新增 `boostMuted` 属性；`setBoostMuted` 将引擎增益切换为 0 或恢复 `m_boostGain`
+
+2. **增益模式标签文字溢出**
+   - 原因：标签从"手机音频"变为"手机音频（增益）"后超出 `Layout.preferredWidth: 64`，与滑块重叠
+   - 修复：移除 VolumeSlider 标签的固定宽度约束，改用 `implicitWidth`
+
+3. **Win11 显示为 Windows 10**
+   - 原因：`RtlGetVersion` 在 Win11 上仍返回 major=10；未检查 build 号
+   - 修复：`SystemChecker` 中增加 build ≥ 22000 判断，正确显示"Windows 11 Build XXXXX"
+
+### 依赖变更
+- 新增 `Qt6::Widgets`（`QApplication`、`QSystemTrayIcon`、`QMenu`、`QAction` 均需要）
+- `QApplication` 替代 `QGuiApplication`
+
+### Release
+- **Tag:** v0.1.2
+- **GitHub Release:** https://github.com/Xiangyu-Lou/BlueDrop/releases/tag/v0.1.2
+- **包含:** BlueDrop.exe + Qt runtime + 内嵌字体 (~75MB zip)
+
+---
+
+## 2026-03-25 - v0.1.1 开发
+
+### 主要变更
+- 增益模式开关、增益滑块 UI（HomePage.qml）
+- SessionVolumeController：IPolicyConfig 切换系统默认端点实现
+- AudioEngine：boost 模式（loopback capture → 软件增益 × N → render 输出）
+- 增益参数：render buffer 100ms，pre-fill 50ms，捕获 maxFrames 1920
+
+---
+
 ## 2026-03-25 - v0.1 后续开发
 
 ### 增益模式 (Boost Mode) 开发中
