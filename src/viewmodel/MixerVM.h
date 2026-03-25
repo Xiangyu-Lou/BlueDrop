@@ -7,6 +7,7 @@ namespace BlueDrop {
 
 class AudioEngine;
 class SessionVolumeController;
+class DeviceEnumerator;
 
 class MixerVM : public QObject {
     Q_OBJECT
@@ -23,8 +24,14 @@ class MixerVM : public QObject {
     Q_PROPERTY(float btMonitorVolume READ btMonitorVolume WRITE setBtMonitorVolume NOTIFY btMonitorVolumeChanged)
     Q_PROPERTY(bool btMonitorMuted READ btMonitorMuted WRITE setBtMonitorMuted NOTIFY btMonitorMutedChanged)
     Q_PROPERTY(bool btSessionFound READ btSessionFound NOTIFY btSessionFoundChanged)
+
+    // Boost mode (Route A amplification beyond 100%)
+    Q_PROPERTY(bool boostEnabled READ boostEnabled WRITE setBoostEnabled NOTIFY boostEnabledChanged)
+    Q_PROPERTY(float boostGain READ boostGain WRITE setBoostGain NOTIFY boostGainChanged)
+    Q_PROPERTY(bool boostAvailable READ boostAvailable NOTIFY boostAvailableChanged)
 public:
     explicit MixerVM(AudioEngine* engine, SessionVolumeController* sessionVol,
+                     DeviceEnumerator* deviceEnum,
                      QObject* parent = nullptr);
 
     float phoneVolume() const;
@@ -39,6 +46,10 @@ public:
     bool btMonitorMuted() const;
     bool btSessionFound() const;
 
+    bool boostEnabled() const { return m_boostEnabled; }
+    float boostGain() const { return m_boostGain; }
+    bool boostAvailable() const;  // true if VB-Cable installed
+
     void setPhoneVolume(float v);
     void setMicVolume(float v);
     void setPhoneMixRatio(float v);
@@ -47,6 +58,9 @@ public:
 
     void setBtMonitorVolume(float v);
     void setBtMonitorMuted(bool v);
+
+    void setBoostEnabled(bool v);
+    void setBoostGain(float v);
 
     Q_INVOKABLE void startEngine();
     Q_INVOKABLE void stopEngine();
@@ -66,13 +80,23 @@ signals:
     void btMonitorVolumeChanged();
     void btMonitorMutedChanged();
     void btSessionFoundChanged();
+    void boostEnabledChanged();
+    void boostGainChanged();
+    void boostAvailableChanged();
 
 private:
     AudioEngine* m_engine;
     SessionVolumeController* m_sessionVol;
+    DeviceEnumerator* m_deviceEnum;
     QString m_lastError;
     float m_btVolume = 1.0f;
     bool m_btMuted = false;
+
+    // Boost state
+    bool m_boostEnabled = false;
+    float m_boostGain = 1.0f;
+    QString m_savedDefaultEndpoint;    // Saved before boost switches endpoint
+    QString m_monitorDeviceId;         // Current monitor headphone device ID
 };
 
 } // namespace BlueDrop

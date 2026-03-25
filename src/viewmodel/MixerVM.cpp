@@ -1,15 +1,18 @@
 #include "MixerVM.h"
 #include "audio/AudioEngine.h"
 #include "audio/SessionVolumeController.h"
+#include "audio/DeviceEnumerator.h"
 #include "system/Logger.h"
 
 namespace BlueDrop {
 
 MixerVM::MixerVM(AudioEngine* engine, SessionVolumeController* sessionVol,
+                 DeviceEnumerator* deviceEnum,
                  QObject* parent)
     : QObject(parent)
     , m_engine(engine)
     , m_sessionVol(sessionVol)
+    , m_deviceEnum(deviceEnum)
 {
     connect(m_engine, &AudioEngine::errorOccurred, this, [this](const QString& msg) {
         LOG_ERRORF("AudioEngine error: %s", qPrintable(msg));
@@ -98,9 +101,85 @@ void MixerVM::stopEngine() {
 
 void MixerVM::scanBtSession(const QString& endpointId, const QString& deviceName) {
     LOG_INFOF("MixerVM::scanBtSession(%s, %s)", qPrintable(endpointId), qPrintable(deviceName));
+    m_monitorDeviceId = endpointId;
     if (m_sessionVol) {
         m_sessionVol->findBluetoothSession(endpointId, deviceName);
     }
+}
+
+bool MixerVM::boostAvailable() const {
+    return m_deviceEnum && m_deviceEnum->isVBCableInstalled();
+}
+
+void MixerVM::setBoostGain(float v) {
+    v = std::clamp(v, 0.0f, 10.0f);
+    if (m_boostGain == v) return;
+    m_boostGain = v;
+    m_engine->setBoostGain(v);
+    emit boostGainChanged();
+}
+
+void MixerVM::setBoostEnabled(bool v) {
+    if (m_boostEnabled == v) return;
+
+    if (v) {
+        // --- Enable boost ---
+        if (!m_deviceEnum || !m_deviceEnum->isVBCableInstalled()) {
+            LOG_ERROR("Boost: VB-Cable not installed");
+            return;
+        }
+
+        // Find VB-Cable output device ID (render endpoint)
+        QString vbCableOutputId;
+        for (const auto& dev : m_deviceEnum->outputDevices()) {
+            if (dev.isVirtual) {
+                vbCableOutputId = dev.id;
+                break;
+            }
+        }
+        if (vbCableOutputId.isEmpty()) {
+            LOG_ERROR("Boost: VB-Cable output device not found");
+            return;
+        }
+
+        // Save current default endpoint
+        m_savedDefaultEndpoint = SessionVolumeController::getDefaultPlaybackEndpoint();
+        LOG_INFOF("Boost: saved default endpoint: %s", qPrintable(m_savedDefaultEndpoint));
+
+        // Switch default to VB-Cable (BT audio follows default endpoint)
+        if (!SessionVolumeController::setDefaultPlaybackEndpoint(vbCableOutputId)) {
+            LOG_ERROR("Boost: failed to switch default endpoint to VB-Cable");
+            return;
+        }
+
+        // Determine monitor device (headphone to render amplified audio to)
+        QString monitorId = m_monitorDeviceId;
+        if (monitorId.isEmpty()) {
+            monitorId = m_savedDefaultEndpoint;  // Use the original default
+        }
+
+        // Start boost engine: capture from VB-Cable → amplify → render to headphone
+        m_engine->setBoostGain(m_boostGain);
+        m_engine->startBoost(vbCableOutputId, monitorId);
+
+        m_boostEnabled = true;
+        LOG_INFO("Boost: enabled");
+    } else {
+        // --- Disable boost ---
+        m_engine->stopBoost();
+
+        // Restore original default endpoint
+        if (!m_savedDefaultEndpoint.isEmpty()) {
+            SessionVolumeController::setDefaultPlaybackEndpoint(m_savedDefaultEndpoint);
+            LOG_INFOF("Boost: restored default endpoint: %s", qPrintable(m_savedDefaultEndpoint));
+            m_savedDefaultEndpoint.clear();
+        }
+
+        m_boostEnabled = false;
+        LOG_INFO("Boost: disabled");
+    }
+
+    emit boostEnabledChanged();
 }
 
 } // namespace BlueDrop

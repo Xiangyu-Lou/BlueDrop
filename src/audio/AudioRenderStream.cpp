@@ -10,7 +10,7 @@ AudioRenderStream::~AudioRenderStream()
     stop();
 }
 
-bool AudioRenderStream::initialize(const wchar_t* deviceId)
+bool AudioRenderStream::initialize(const wchar_t* deviceId, REFERENCE_TIME bufferDuration)
 {
     Microsoft::WRL::ComPtr<IMMDeviceEnumerator> enumerator;
     HRESULT hr = CoCreateInstance(
@@ -40,9 +40,6 @@ bool AudioRenderStream::initialize(const wchar_t* deviceId)
         auto* ext = reinterpret_cast<WAVEFORMATEXTENSIBLE*>(mixFormat);
         m_isFloat = (ext->SubFormat == KSDATAFORMAT_SUBTYPE_IEEE_FLOAT);
     }
-
-    // 10ms buffer
-    REFERENCE_TIME bufferDuration = 100000;
 
     hr = m_audioClient->Initialize(
         AUDCLNT_SHAREMODE_SHARED,

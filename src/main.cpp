@@ -101,7 +101,8 @@ int main(int argc, char* argv[])
     // Create ViewModels
     BluetoothVM bluetoothVM(bluedrop.bluetooth());
     DeviceVM deviceVM(bluedrop.deviceEnumerator(), bluedrop.audioEngine());
-    MixerVM mixerVM(bluedrop.audioEngine(), bluedrop.sessionVolume());
+    MixerVM mixerVM(bluedrop.audioEngine(), bluedrop.sessionVolume(),
+                    bluedrop.deviceEnumerator());
     SettingsVM settingsVM(bluedrop.checkResult());
 
     // When BT connects, auto-scan for BT audio session on monitor endpoint

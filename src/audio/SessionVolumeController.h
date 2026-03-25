@@ -40,6 +40,15 @@ public:
     QString sessionDisplayName() const { return m_sessionName; }
     DWORD sessionProcessId() const { return m_sessionPid; }
 
+    // --- Default endpoint switching (via IPolicyConfig) ---
+
+    /// Get the current default playback endpoint ID.
+    static QString getDefaultPlaybackEndpoint();
+
+    /// Set the default playback endpoint (for eConsole + eMultimedia roles).
+    /// Returns true on success.
+    static bool setDefaultPlaybackEndpoint(const QString& deviceId);
+
 signals:
     void sessionFound(const QString& displayName);
     void sessionLost();

@@ -24,6 +24,7 @@ AudioEngine::AudioEngine(QObject* parent)
 
 AudioEngine::~AudioEngine()
 {
+    stopBoost();
     stop();
 }
 
@@ -220,6 +221,229 @@ void AudioEngine::audioThreadFunc()
     }
 
     CoUninitialize();
+}
+
+// --- Boost mode implementation ---
+
+void AudioEngine::setBoostGain(float gain)
+{
+    m_boostGain.store(std::clamp(gain, 0.0f, 10.0f));
+}
+
+void AudioEngine::startBoost(const QString& captureDeviceId,
+                              const QString& renderDeviceId)
+{
+    if (m_boostRunning.load()) {
+        LOG_WARN("Boost already running");
+        return;
+    }
+
+    LOG_INFOF("AudioEngine::startBoost() capture=%s render=%s",
+              qPrintable(captureDeviceId), qPrintable(renderDeviceId));
+
+    if (captureDeviceId.isEmpty() || renderDeviceId.isEmpty()) {
+        LOG_ERROR("Boost: missing device ID");
+        emit errorOccurred(QString::fromUtf8(u8"增益模式缺少设备配置"));
+        return;
+    }
+
+    m_boostStopRequested.store(false);
+
+    // Capture device/render device IDs for the thread
+    QString capId = captureDeviceId;
+    QString renId = renderDeviceId;
+
+    m_boostThread = std::thread([this, capId, renId]() {
+        // Elevate thread priority
+        DWORD taskIndex = 0;
+        HANDLE hTask = AvSetMmThreadCharacteristicsW(L"Pro Audio", &taskIndex);
+        CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+
+        auto capture = std::make_unique<AudioCaptureStream>();
+        auto render = std::make_unique<AudioRenderStream>();
+
+        bool hasCap = false;
+        bool hasRen = false;
+
+        // Initialize loopback capture from VB-Cable (where BT audio is now routed)
+        {
+            auto id = capId.toStdWString();
+            if (capture->initialize(id.c_str(), true)) {
+                capture->start();
+                hasCap = true;
+                LOG_INFO("Boost: loopback capture initialized");
+            } else {
+                LOG_ERROR("Boost: failed to init loopback capture");
+            }
+        }
+
+        // Initialize render to headphone.
+        // Use a 100ms buffer (1000000 × 100ns).
+        // Our polling loop runs every ~15ms (Sleep(8) + overhead), while the WASAPI
+        // capture period is 10ms. Each poll may drain 1-2 WASAPI periods (480-960 frames).
+        // A 100ms render buffer with 50ms pre-fill gives 50ms of free space — enough to
+        // absorb a burst of up to 5 periods without overflow.
+        {
+            auto id = renId.toStdWString();
+            if (render->initialize(id.c_str(), 1000000)) {
+                render->start();
+                hasRen = true;
+                LOG_INFOF("Boost: render initialized, buffer=%u frames", render->bufferFrames());
+            } else {
+                LOG_ERROR("Boost: failed to init render");
+            }
+        }
+
+        if (!hasCap || !hasRen) {
+            if (hasCap) capture->stop();
+            if (hasRen) render->stop();
+            QMetaObject::invokeMethod(this, [this]() {
+                emit errorOccurred(QString::fromUtf8(u8"增益模式启动失败"));
+            }, Qt::QueuedConnection);
+            CoUninitialize();
+            if (hTask) AvRevertMmThreadCharacteristics(hTask);
+            return;
+        }
+
+        m_boostRunning.store(true);
+
+        // Log format info for diagnosis
+        LOG_INFOF("Boost: capture sampleRate=%u channels=%u",
+                  capture->sampleRate(), capture->channels());
+        LOG_INFOF("Boost: render  sampleRate=%u channels=%u bufferFrames=%u",
+                  render->sampleRate(), render->channels(), render->bufferFrames());
+        LOG_INFOF("Boost: Route-B running = %s", m_running.load() ? "YES (potential feedback!)" : "no");
+
+        // Warn if sample rates differ — this causes gradual buffer drift and stuttering
+        if (capture->sampleRate() != render->sampleRate()) {
+            LOG_WARNF("Boost: sample rate mismatch! capture=%u render=%u — resampling required",
+                      capture->sampleRate(), render->sampleRate());
+        }
+
+        LOG_INFO("Boost: audio loop started");
+
+        // Resampler: converts capture rate → render rate if they differ
+        Resampler resampler(capture->sampleRate(), render->sampleRate(), 2);
+
+        // Read buffer: large enough to drain up to 4 WASAPI capture periods per poll.
+        // Our loop runs every ~15ms but WASAPI delivers data every 10ms, so we can
+        // accumulate 1-2 periods between polls. Using 4× gives plenty of headroom
+        // and ensures we always fully drain the WASAPI capture queue.
+        constexpr size_t MAX_READ_FRAMES = PROCESS_BUFFER_FRAMES * 4; // 1920 frames = 40ms
+        std::vector<float> capBuf(MAX_READ_FRAMES * 2, 0.0f);
+        // Resample output: worst case input_frames * (renderRate/captureRate) + 1
+        const size_t rsMaxFrames = MAX_READ_FRAMES + 16;
+        std::vector<float> rsBuf(rsMaxFrames * 2, 0.0f);
+
+        // Pre-fill silence using actual render sample rate
+        {
+            const uint32_t renderRate = render->sampleRate() > 0 ? render->sampleRate() : 48000;
+            const size_t PREFILL_FRAMES = renderRate * 50 / 1000; // 50ms (half of 100ms buffer)
+            size_t available = render->availableFrames();
+            size_t toFill = std::min(available, PREFILL_FRAMES);
+            size_t written = 0;
+            while (written < toFill) {
+                size_t chunk = std::min(toFill - written, PROCESS_BUFFER_FRAMES);
+                render->writeFrames(capBuf.data(), chunk);
+                written += chunk;
+            }
+            LOG_INFOF("Boost: pre-filled %zu frames (%.1f ms) of silence",
+                      written, written * 1000.0f / renderRate);
+        }
+
+        // Diagnostic counters
+        uint32_t loopCount = 0;
+        uint32_t zeroCapCount = 0;
+        uint32_t totalCapFrames = 0;
+        uint32_t totalWrittenFrames = 0;
+
+        while (!m_boostStopRequested.load()) {
+            // Drain ALL available WASAPI capture data (not just one period).
+            // Without this, accumulated periods overflow the WASAPI buffer and
+            // cause DATA_DISCONTINUITY (silent frame drops → audible stuttering).
+            size_t frames = capture->readFrames(capBuf.data(), MAX_READ_FRAMES);
+
+            if (frames > 0) {
+                zeroCapCount = 0;  // reset consecutive-zero counter
+                float gain = m_boostGain.load();
+                for (size_t i = 0; i < frames * 2; i++) {
+                    capBuf[i] = softClip(capBuf[i] * gain);
+                }
+
+                // Resample if needed, then write to render
+                size_t outFrames;
+                const float* writePtr;
+                if (resampler.needsResampling()) {
+                    outFrames = resampler.process(capBuf.data(), frames,
+                                                  rsBuf.data(), rsMaxFrames);
+                    writePtr = rsBuf.data();
+                } else {
+                    outFrames = frames;
+                    writePtr = capBuf.data();
+                }
+
+                size_t available = render->availableFrames();
+                size_t written = render->writeFrames(writePtr, outFrames);
+                totalCapFrames += static_cast<uint32_t>(frames);
+                totalWrittenFrames += static_cast<uint32_t>(written);
+
+                // Warn if render buffer is dangerously low
+                if (available < 240) { // < 5ms
+                    LOG_WARNF("Boost [iter %u]: render near-empty! available=%zu frames", loopCount, available);
+                }
+                // Warn if frames were silently dropped (buffer full)
+                if (written < outFrames) {
+                    LOG_WARNF("Boost [iter %u]: render full, dropped %zu frames (available=%zu)",
+                              loopCount, outFrames - written, available);
+                }
+            } else {
+                zeroCapCount++;
+                if (zeroCapCount == 5) {
+                    LOG_WARNF("Boost [iter %u]: capture returning 0 frames for %u consecutive polls",
+                              loopCount, zeroCapCount);
+                }
+            }
+
+            // Periodic stats every 200 iterations (~1.6s)
+            if (++loopCount % 200 == 0) {
+                size_t renderAvail = render->availableFrames();
+                uint32_t renderBuf = render->bufferFrames();
+                float avgCapPerIter = loopCount > 0 ? static_cast<float>(totalCapFrames) / loopCount : 0.f;
+                LOG_INFOF("Boost stats [iter %u]: capFrames=%u writtenFrames=%u avgCap/iter=%.0f "
+                          "renderAvail=%zu/%u (%.0f%%) zeroPolls=%u",
+                          loopCount, totalCapFrames, totalWrittenFrames, avgCapPerIter,
+                          renderAvail, renderBuf,
+                          renderBuf > 0 ? renderAvail * 100.0f / renderBuf : 0.f,
+                          zeroCapCount);
+            }
+
+            // Sleep 5ms — shorter than Sleep(8) to reduce period accumulation.
+            // With ~5ms sleep + ~5ms overhead = ~10ms per loop, matching the
+            // WASAPI 10ms capture period and minimising buffer backlog.
+            Sleep(5);
+        }
+
+        capture->stop();
+        render->stop();
+
+        if (hTask) AvRevertMmThreadCharacteristics(hTask);
+        CoUninitialize();
+
+        m_boostRunning.store(false);
+        LOG_INFO("Boost: stopped");
+    });
+}
+
+void AudioEngine::stopBoost()
+{
+    if (!m_boostRunning.load() && !m_boostThread.joinable()) return;
+
+    m_boostStopRequested.store(true);
+    if (m_boostThread.joinable()) {
+        m_boostThread.join();
+    }
+    m_boostRunning.store(false);
+    LOG_INFO("Boost: thread joined");
 }
 
 } // namespace BlueDrop

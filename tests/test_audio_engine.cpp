@@ -72,6 +72,42 @@ TEST_F(AudioEngineTest, StopWithoutStartIsSafe) {
     EXPECT_FALSE(engine.isRunning());
 }
 
+TEST_F(AudioEngineTest, BoostGainClamping) {
+    AudioEngine engine;
+
+    // Normal range
+    engine.setBoostGain(1.0f);
+    EXPECT_FLOAT_EQ(engine.boostGain(), 1.0f);
+
+    engine.setBoostGain(5.0f);
+    EXPECT_FLOAT_EQ(engine.boostGain(), 5.0f);
+
+    // Max 10x
+    engine.setBoostGain(10.0f);
+    EXPECT_FLOAT_EQ(engine.boostGain(), 10.0f);
+
+    // Above max -> clamped to 10
+    engine.setBoostGain(15.0f);
+    EXPECT_FLOAT_EQ(engine.boostGain(), 10.0f);
+
+    // Below min -> clamped to 0
+    engine.setBoostGain(-1.0f);
+    EXPECT_FLOAT_EQ(engine.boostGain(), 0.0f);
+}
+
+TEST_F(AudioEngineTest, StopBoostWithoutStartIsSafe) {
+    AudioEngine engine;
+    // Should not crash or deadlock
+    engine.stopBoost();
+    EXPECT_FALSE(engine.isBoostRunning());
+}
+
+TEST_F(AudioEngineTest, BoostInitialGain) {
+    AudioEngine engine;
+    EXPECT_FLOAT_EQ(engine.boostGain(), 1.0f);
+    EXPECT_FALSE(engine.isBoostRunning());
+}
+
 // Resampler tests
 TEST(ResamplerTest, PassthroughWhenSameRate) {
     Resampler resampler(48000, 48000, 2);

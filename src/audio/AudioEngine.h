@@ -42,11 +42,22 @@ public:
     bool phoneMuted() const { return m_phoneMuted.load(); }
     bool micMuted() const { return m_micMuted.load(); }
 
+    // --- Boost mode (Route A amplification) ---
+    // Captures from one endpoint, applies gain, renders to another.
+    void startBoost(const QString& captureDeviceId,
+                    const QString& renderDeviceId);
+    void stopBoost();
+    bool isBoostRunning() const { return m_boostRunning.load(); }
+
+    void setBoostGain(float gain);   // 0.0 ~ 10.0 (1000%)
+    float boostGain() const { return m_boostGain.load(); }
+
 signals:
     void errorOccurred(const QString& message);
 
 private:
     void audioThreadFunc();
+    void boostThreadFunc();
     static float softClip(float sample);
 
     // Device IDs
@@ -54,15 +65,23 @@ private:
     QString m_micDeviceId;
     QString m_virtualCableDeviceId;
 
-    // Audio streams
+    // Audio streams (Route B)
     std::unique_ptr<AudioCaptureStream> m_loopbackCapture;
     std::unique_ptr<AudioCaptureStream> m_micCapture;
     std::unique_ptr<AudioRenderStream> m_virtualCableRender;
 
-    // Audio thread
+    // Route B audio thread
     std::thread m_audioThread;
     std::atomic<bool> m_running{false};
     std::atomic<bool> m_stopRequested{false};
+
+    // Boost mode streams (Route A amplification)
+    std::unique_ptr<AudioCaptureStream> m_boostCapture;
+    std::unique_ptr<AudioRenderStream> m_boostRender;
+    std::thread m_boostThread;
+    std::atomic<bool> m_boostRunning{false};
+    std::atomic<bool> m_boostStopRequested{false};
+    std::atomic<float> m_boostGain{1.0f};
 
     // Volume controls (atomic for thread safety)
     std::atomic<float> m_phoneVolume{1.0f};

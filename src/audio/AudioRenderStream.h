@@ -18,7 +18,9 @@ public:
     AudioRenderStream& operator=(const AudioRenderStream&) = delete;
 
     // Initialize on the specified render device.
-    bool initialize(const wchar_t* deviceId);
+    // bufferDuration: WASAPI buffer size in 100-nanosecond units (default 10ms = 100000).
+    // Use a larger value (e.g. 500000 = 50ms) for pass-through paths where timing is loose.
+    bool initialize(const wchar_t* deviceId, REFERENCE_TIME bufferDuration = 100000);
 
     bool start();
     bool stop();
