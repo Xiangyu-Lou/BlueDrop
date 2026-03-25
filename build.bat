@@ -8,6 +8,9 @@ if errorlevel 1 (
 set CMAKE_BIN=C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe
 set NINJA_BIN=C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja\ninja.exe
 
+rem Add Qt bin to PATH for DLL discovery during test registration
+set PATH=A:\Qt\6.11.0\msvc2022_64\bin;%PATH%
+
 cd /d F:\Project\BlueDrop
 
 echo.

@@ -3,6 +3,8 @@ qt_policy(SET QTP0004 NEW)
 
 set(BLUEDROP_SOURCES
     main.cpp
+    system/SystemChecker.h
+    system/SystemChecker.cpp
 )
 
 # Qt6 QML module
