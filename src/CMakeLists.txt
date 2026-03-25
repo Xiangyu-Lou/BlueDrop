@@ -22,6 +22,8 @@ set(BLUEDROP_CORE_SOURCES
     bluetooth/BluetoothManager.cpp
     app/Application.h
     app/Application.cpp
+    app/TrayManager.h
+    app/TrayManager.cpp
     viewmodel/BluetoothVM.h
     viewmodel/BluetoothVM.cpp
     viewmodel/DeviceVM.h
@@ -40,6 +42,7 @@ target_include_directories(BlueDrop_core PUBLIC
 
 target_link_libraries(BlueDrop_core PUBLIC
     Qt6::Core
+    Qt6::Widgets
     ole32
     oleaut32
     mmdevapi

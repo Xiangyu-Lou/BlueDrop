@@ -24,7 +24,7 @@ add_compile_definitions(
 )
 
 # Find Qt6
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick Widgets)
 
 # Source subdirectory
 add_subdirectory(src)

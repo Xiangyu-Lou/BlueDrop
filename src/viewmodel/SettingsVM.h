@@ -16,6 +16,8 @@ class SettingsVM : public QObject {
     Q_PROPERTY(bool vbCableInstalled READ vbCableInstalled CONSTANT)
     Q_PROPERTY(QString vbCableDeviceName READ vbCableDeviceName CONSTANT)
     Q_PROPERTY(QString appVersion READ appVersion CONSTANT)
+    // "": ask on close  "minimize": minimize to tray  "close": exit
+    Q_PROPERTY(QString closeAction READ closeAction WRITE setCloseAction NOTIFY closeActionChanged)
 public:
     explicit SettingsVM(const SystemCheckResult& result, QObject* parent = nullptr);
 
@@ -25,7 +27,13 @@ public:
     QString bluetoothAdapterName() const { return m_bluetoothAdapterName; }
     bool vbCableInstalled() const { return m_vbCableInstalled; }
     QString vbCableDeviceName() const { return m_vbCableDeviceName; }
-    QString appVersion() const { return "0.1.0"; }
+    QString appVersion() const { return "0.1.1"; }
+
+    QString closeAction() const { return m_closeAction; }
+    void setCloseAction(const QString& action);
+
+signals:
+    void closeActionChanged();
 
 private:
     QString m_osVersion;
@@ -34,6 +42,7 @@ private:
     QString m_bluetoothAdapterName;
     bool m_vbCableInstalled;
     QString m_vbCableDeviceName;
+    QString m_closeAction;
 };
 
 } // namespace BlueDrop

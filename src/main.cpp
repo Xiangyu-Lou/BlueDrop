@@ -1,4 +1,4 @@
-#include <QGuiApplication>
+#include <QApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QFontDatabase>
@@ -15,6 +15,7 @@
 #include "viewmodel/DeviceVM.h"
 #include "viewmodel/MixerVM.h"
 #include "viewmodel/SettingsVM.h"
+#include "app/TrayManager.h"
 
 using namespace Qt::StringLiterals;
 using namespace BlueDrop;
@@ -69,7 +70,7 @@ int main(int argc, char* argv[])
     // Use Basic style for full control customization support
     qputenv("QT_QUICK_CONTROLS_STYLE", "Basic");
 
-    QGuiApplication app(argc, argv);
+    QApplication app(argc, argv);
     app.setApplicationName("BlueDrop");
     app.setApplicationDisplayName(u"聚音 BlueDrop"_s);
     app.setApplicationVersion("0.1.1");
@@ -124,6 +125,10 @@ int main(int argc, char* argv[])
             }
         });
 
+    // Create system tray manager
+    TrayManager trayManager;
+    trayManager.show();
+
     // Set up QML engine
     QQmlApplicationEngine engine;
 
@@ -132,6 +137,7 @@ int main(int argc, char* argv[])
     engine.rootContext()->setContextProperty("deviceVM", &deviceVM);
     engine.rootContext()->setContextProperty("mixerVM", &mixerVM);
     engine.rootContext()->setContextProperty("settingsVM", &settingsVM);
+    engine.rootContext()->setContextProperty("trayManager", &trayManager);
 
     // Load main QML
     const QUrl url(u"qrc:/qt/qml/BlueDrop/qml/main.qml"_s);

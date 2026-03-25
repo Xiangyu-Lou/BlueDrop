@@ -34,6 +34,7 @@ public:
     explicit MixerVM(AudioEngine* engine, SessionVolumeController* sessionVol,
                      DeviceEnumerator* deviceEnum,
                      QObject* parent = nullptr);
+    ~MixerVM();
 
     float phoneVolume() const;
     float micVolume() const;
@@ -67,6 +68,8 @@ public:
 
     Q_INVOKABLE void startEngine();
     Q_INVOKABLE void stopEngine();
+    /// Load and apply last saved state (boost gain, volume, etc.). Call once on startup.
+    Q_INVOKABLE void autoRestoreState();
 
     /// Scan for BT audio session on the given endpoint
     Q_INVOKABLE void scanBtSession(const QString& endpointId,

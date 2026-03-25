@@ -3,6 +3,7 @@
 #include "audio/SessionVolumeController.h"
 #include "audio/DeviceEnumerator.h"
 #include "system/Logger.h"
+#include <QSettings>
 
 namespace BlueDrop {
 
@@ -23,13 +24,25 @@ MixerVM::MixerVM(AudioEngine* engine, SessionVolumeController* sessionVol,
     if (m_sessionVol) {
         connect(m_sessionVol, &SessionVolumeController::sessionFound, this, [this](const QString& name) {
             LOG_INFOF("BT session found: %s", qPrintable(name));
-            // Read current volume from the session
-            m_btVolume = m_sessionVol->volume();
-            m_btMuted = m_sessionVol->isMuted();
+            // Apply our saved volume/mute to the newly found session
+            m_sessionVol->setVolume(m_btVolume);
+            m_sessionVol->setMuted(m_btMuted);
             emit btMonitorVolumeChanged();
             emit btMonitorMutedChanged();
             emit btSessionFoundChanged();
         });
+    }
+}
+
+MixerVM::~MixerVM()
+{
+    // Restore original audio endpoint if boost was active when app closes
+    if (m_boostEnabled) {
+        m_engine->stopBoost();
+        if (!m_savedDefaultEndpoint.isEmpty()) {
+            SessionVolumeController::setDefaultPlaybackEndpoint(m_savedDefaultEndpoint);
+            LOG_INFOF("MixerVM dtor: restored endpoint %s", qPrintable(m_savedDefaultEndpoint));
+        }
     }
 }
 
@@ -76,6 +89,7 @@ void MixerVM::setBtMonitorVolume(float v) {
     if (m_sessionVol) {
         m_sessionVol->setVolume(m_btVolume);
     }
+    QSettings().setValue("monitor/volume", m_btVolume);
     emit btMonitorVolumeChanged();
 }
 
@@ -84,6 +98,7 @@ void MixerVM::setBtMonitorMuted(bool v) {
     if (m_sessionVol) {
         m_sessionVol->setMuted(v);
     }
+    QSettings().setValue("monitor/muted", m_btMuted);
     emit btMonitorMutedChanged();
 }
 
@@ -115,7 +130,8 @@ void MixerVM::setBoostGain(float v) {
     v = std::clamp(v, 0.0f, 10.0f);
     if (m_boostGain == v) return;
     m_boostGain = v;
-    m_engine->setBoostGain(v);
+    if (!m_boostMuted) m_engine->setBoostGain(v);
+    QSettings().setValue("boost/gain", m_boostGain);
     emit boostGainChanged();
 }
 
@@ -123,6 +139,7 @@ void MixerVM::setBoostMuted(bool v) {
     if (m_boostMuted == v) return;
     m_boostMuted = v;
     m_engine->setBoostGain(v ? 0.0f : m_boostGain);
+    QSettings().setValue("boost/muted", m_boostMuted);
     emit boostMutedChanged();
 }
 
@@ -186,7 +203,31 @@ void MixerVM::setBoostEnabled(bool v) {
         LOG_INFO("Boost: disabled");
     }
 
+    QSettings().setValue("boost/enabled", m_boostEnabled);
     emit boostEnabledChanged();
+}
+
+void MixerVM::autoRestoreState()
+{
+    QSettings s;
+
+    // Restore monitor volume/mute (applied when BT session is found)
+    m_btVolume = std::clamp(s.value("monitor/volume", 1.0f).toFloat(), 0.0f, 1.0f);
+    m_btMuted  = s.value("monitor/muted", false).toBool();
+    emit btMonitorVolumeChanged();
+    emit btMonitorMutedChanged();
+
+    // Restore boost gain/mute
+    m_boostGain  = std::clamp(s.value("boost/gain", 1.0f).toFloat(), 0.0f, 10.0f);
+    m_boostMuted = s.value("boost/muted", false).toBool();
+    emit boostGainChanged();
+    emit boostMutedChanged();
+
+    // Re-enable boost if it was active on last exit
+    if (s.value("boost/enabled", false).toBool()) {
+        LOG_INFO("autoRestoreState: re-enabling boost from saved state");
+        setBoostEnabled(true);
+    }
 }
 
 } // namespace BlueDrop
