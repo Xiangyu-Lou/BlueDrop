@@ -7,6 +7,9 @@ set(BLUEDROP_CORE_SOURCES
     system/SystemChecker.cpp
     audio/DeviceEnumerator.h
     audio/DeviceEnumerator.cpp
+    bluetooth/BluetoothTypes.h
+    bluetooth/BluetoothManager.h
+    bluetooth/BluetoothManager.cpp
 )
 
 add_library(BlueDrop_core STATIC ${BLUEDROP_CORE_SOURCES})
@@ -20,6 +23,7 @@ target_link_libraries(BlueDrop_core PUBLIC
     ole32
     oleaut32
     mmdevapi
+    WindowsApp.lib
 )
 
 if(MSVC)

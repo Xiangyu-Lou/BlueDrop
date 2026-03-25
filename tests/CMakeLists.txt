@@ -36,8 +36,22 @@ if(BUILD_TESTS)
         target_compile_options(test_device_enumerator PRIVATE /utf-8 /W4 /wd4100)
     endif()
 
+    # BluetoothManager tests
+    add_executable(test_bluetooth_manager
+        test_bluetooth_manager.cpp
+    )
+    target_link_libraries(test_bluetooth_manager PRIVATE
+        GTest::gtest
+        GTest::gtest_main
+        BlueDrop_core
+    )
+    if(MSVC)
+        target_compile_options(test_bluetooth_manager PRIVATE /utf-8 /W4 /wd4100 /bigobj)
+    endif()
+
     include(GoogleTest)
     gtest_discover_tests(BlueDrop_tests)
     gtest_discover_tests(test_system_checker)
     gtest_discover_tests(test_device_enumerator)
+    gtest_discover_tests(test_bluetooth_manager)
 endif()
