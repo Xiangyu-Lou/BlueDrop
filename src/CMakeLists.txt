@@ -18,6 +18,16 @@ set(BLUEDROP_CORE_SOURCES
     bluetooth/BluetoothTypes.h
     bluetooth/BluetoothManager.h
     bluetooth/BluetoothManager.cpp
+    app/Application.h
+    app/Application.cpp
+    viewmodel/BluetoothVM.h
+    viewmodel/BluetoothVM.cpp
+    viewmodel/DeviceVM.h
+    viewmodel/DeviceVM.cpp
+    viewmodel/MixerVM.h
+    viewmodel/MixerVM.cpp
+    viewmodel/SettingsVM.h
+    viewmodel/SettingsVM.cpp
 )
 
 add_library(BlueDrop_core STATIC ${BLUEDROP_CORE_SOURCES})
