@@ -95,5 +95,5 @@ if(MSVC)
 endif()
 
 set_target_properties(BlueDrop PROPERTIES
-    WIN32_EXECUTABLE FALSE
+    WIN32_EXECUTABLE TRUE
 )
