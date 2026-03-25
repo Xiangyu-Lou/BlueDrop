@@ -65,6 +65,14 @@ ScrollView {
                             if (deviceVM) deviceVM.selectedMonitorIndex = index
                         }
                     }
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: qsTr("推荐使用跟随系统默认")
+                        font.pixelSize: Theme.fontSmall
+                        color: Theme.textSecondary
+                        wrapMode: Text.WordWrap
+                    }
                 }
             }
         }
@@ -106,7 +114,7 @@ ScrollView {
                         Layout.fillWidth: true
                     }
 
-                    // Boost toggle
+                    // Boost toggle (shown only when VB-Cable is installed)
                     RowLayout {
                         spacing: 6
                         visible: mixerVM ? mixerVM.boostAvailable : false
@@ -115,6 +123,31 @@ ScrollView {
                             text: qsTr("增益模式")
                             font.pixelSize: Theme.fontCaption
                             color: boostSwitch.checked ? Theme.accent : Theme.textSecondary
+                        }
+
+                        // Help tooltip button
+                        Rectangle {
+                            width: 16
+                            height: 16
+                            radius: 8
+                            color: boostHelpArea.containsMouse ? Theme.accent : "#CCCCCC"
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: "?"
+                                font.pixelSize: 10
+                                font.weight: Font.Bold
+                                color: "white"
+                            }
+
+                            MouseArea {
+                                id: boostHelpArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                ToolTip.visible: containsMouse
+                                ToolTip.text: qsTr("增益模式通过软件放大音量，可突破系统音量上限。\n但会增加音频延迟（约 15ms），且可能造成轻微卡顿。")
+                                ToolTip.delay: 300
+                            }
                         }
 
                         // Debounce timer: ignore rapid toggles within 600ms to prevent
@@ -206,13 +239,42 @@ ScrollView {
                     wrapMode: Text.WordWrap
                 }
 
-                Text {
+                // VB-Cable not installed: show install prompt
+                RowLayout {
                     Layout.fillWidth: true
                     visible: mixerVM && !mixerVM.boostAvailable
-                    text: qsTr("增益模式需要安装 VB-Audio Virtual Cable")
-                    color: Theme.warning
-                    font.pixelSize: Theme.fontCaption
-                    wrapMode: Text.WordWrap
+                    spacing: 8
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: qsTr("增益模式需要安装 VB-Audio Virtual Cable")
+                        color: Theme.warning
+                        font.pixelSize: Theme.fontCaption
+                        wrapMode: Text.WordWrap
+                    }
+
+                    Rectangle {
+                        height: 24
+                        implicitWidth: downloadLabel.implicitWidth + 16
+                        radius: 4
+                        color: downloadArea.containsMouse ? Theme.accent : "#CCCCCC"
+
+                        Text {
+                            id: downloadLabel
+                            anchors.centerIn: parent
+                            text: qsTr("下载安装")
+                            font.pixelSize: Theme.fontSmall
+                            color: "white"
+                        }
+
+                        MouseArea {
+                            id: downloadArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: Qt.openUrlExternally("https://vb-audio.com/Cable/")
+                        }
+                    }
                 }
             }
         }

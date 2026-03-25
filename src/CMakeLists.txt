@@ -73,6 +73,7 @@ qt_add_qml_module(BlueDrop
         qml/pages/HomePage.qml
         qml/pages/BroadcastPage.qml
         qml/pages/SettingsPage.qml
+        qml/pages/HelpPage.qml
     RESOURCES
         qml/theme/qmldir
 )

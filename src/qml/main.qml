@@ -47,6 +47,7 @@ ApplicationWindow {
             HomePage {}
             BroadcastPage {}
             SettingsPage {}
+            HelpPage {}
         }
     }
 }

@@ -35,7 +35,8 @@ Rectangle {
             model: [
                 { icon: "🏠", label: qsTr("主页") },
                 { icon: "🎙", label: qsTr("广播") },
-                { icon: "⚙", label: qsTr("设置") }
+                { icon: "⚙", label: qsTr("设置") },
+                { icon: "?", label: qsTr("帮助") }
             ]
 
             delegate: Rectangle {
@@ -88,7 +89,7 @@ Rectangle {
         Text {
             Layout.leftMargin: 24
             Layout.bottomMargin: 20
-            text: "v0.1.0"
+            text: "v0.1.1"
             font.pixelSize: Theme.fontSmall
             color: Theme.textSecondary
         }
