@@ -1,16 +1,39 @@
 qt_policy(SET QTP0001 NEW)
 qt_policy(SET QTP0004 NEW)
 
-set(BLUEDROP_SOURCES
-    main.cpp
+# Core library (shared between main app and tests)
+set(BLUEDROP_CORE_SOURCES
     system/SystemChecker.h
     system/SystemChecker.cpp
+    audio/DeviceEnumerator.h
+    audio/DeviceEnumerator.cpp
 )
 
-# Qt6 QML module
-qt_add_executable(BlueDrop ${BLUEDROP_SOURCES})
+add_library(BlueDrop_core STATIC ${BLUEDROP_CORE_SOURCES})
 
-# QML module with QML files
+target_include_directories(BlueDrop_core PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+target_link_libraries(BlueDrop_core PUBLIC
+    Qt6::Core
+    ole32
+    oleaut32
+    mmdevapi
+)
+
+if(MSVC)
+    target_compile_options(BlueDrop_core PRIVATE
+        /bigobj
+        /utf-8
+        /W4
+        /wd4100
+    )
+endif()
+
+# Main executable
+qt_add_executable(BlueDrop main.cpp)
+
 qt_add_qml_module(BlueDrop
     URI BlueDrop
     VERSION 1.0
@@ -18,34 +41,23 @@ qt_add_qml_module(BlueDrop
         qml/main.qml
 )
 
-target_include_directories(BlueDrop PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-)
-
-# Link libraries
 target_link_libraries(BlueDrop PRIVATE
-    Qt6::Core
+    BlueDrop_core
     Qt6::Gui
     Qt6::Qml
     Qt6::Quick
-    # Windows system libraries
-    ole32
-    oleaut32
-    mmdevapi
     WindowsApp.lib
 )
 
-# MSVC specific options
 if(MSVC)
     target_compile_options(BlueDrop PRIVATE
-        /bigobj         # Required for C++/WinRT large headers
-        /utf-8          # Source and execution charset
-        /W4             # Warning level 4
-        /wd4100         # Unreferenced formal parameter (common in WinRT callbacks)
+        /bigobj
+        /utf-8
+        /W4
+        /wd4100
     )
 endif()
 
-# Win32 application (no console window)
 set_target_properties(BlueDrop PROPERTIES
     WIN32_EXECUTABLE TRUE
 )
