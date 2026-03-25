@@ -13,37 +13,48 @@ Rectangle {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.topMargin: 20
-        spacing: 4
+        anchors.topMargin: 28
+        spacing: 2
 
         // App title
-        Text {
-            Layout.leftMargin: 20
-            Layout.bottomMargin: 20
-            text: "聚音"
-            font.pixelSize: 20
-            font.bold: true
-            color: Theme.textPrimary
+        RowLayout {
+            Layout.leftMargin: 24
+            Layout.bottomMargin: 24
+            spacing: 8
+
+            Text {
+                text: "聚音"
+                font.pixelSize: 22
+                font.weight: Font.Bold
+                color: Theme.textPrimary
+            }
         }
 
         // Nav items
         Repeater {
             model: [
                 { icon: "🏠", label: qsTr("主页") },
+                { icon: "🎙", label: qsTr("广播") },
                 { icon: "⚙", label: qsTr("设置") }
             ]
 
             delegate: Rectangle {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 40
-                Layout.leftMargin: 8
-                Layout.rightMargin: 8
+                Layout.preferredHeight: 42
+                Layout.leftMargin: 12
+                Layout.rightMargin: 12
                 radius: Theme.smallRadius
-                color: root.currentIndex === index ? Theme.accent : "transparent"
+                color: {
+                    if (root.currentIndex === index) return Theme.navSelected
+                    if (mouseArea.containsMouse) return Theme.navHover
+                    return "transparent"
+                }
 
                 MouseArea {
+                    id: mouseArea
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
+                    hoverEnabled: true
                     onClicked: {
                         root.currentIndex = index
                         root.pageSelected(index)
@@ -52,18 +63,20 @@ Rectangle {
 
                 RowLayout {
                     anchors.fill: parent
-                    anchors.leftMargin: 12
-                    spacing: 10
+                    anchors.leftMargin: 14
+                    spacing: 12
 
                     Text {
                         text: modelData.icon
                         font.pixelSize: 16
+                        opacity: root.currentIndex === index ? 1.0 : 0.7
                     }
 
                     Text {
                         text: modelData.label
                         font.pixelSize: Theme.fontBody
-                        color: root.currentIndex === index ? "white" : Theme.textPrimary
+                        font.weight: root.currentIndex === index ? Font.DemiBold : Font.Normal
+                        color: root.currentIndex === index ? Theme.textPrimary : Theme.textSecondary
                     }
                 }
             }
@@ -73,8 +86,8 @@ Rectangle {
 
         // Version info
         Text {
-            Layout.leftMargin: 20
-            Layout.bottomMargin: 16
+            Layout.leftMargin: 24
+            Layout.bottomMargin: 20
             text: "v0.1.0"
             font.pixelSize: Theme.fontSmall
             color: Theme.textSecondary

@@ -4,7 +4,7 @@ import QtQuick.Layouts
 
 RowLayout {
     id: root
-    spacing: 10
+    spacing: 12
 
     property string label: ""
     property real value: 1.0
@@ -12,14 +12,14 @@ RowLayout {
     property real from: 0.0
     property real to: 2.0
 
-    signal valueChanged(real newValue)
-    signal mutedToggled(bool newMuted)
+    signal volumeChanged(real newValue)
+    signal muteToggled(bool newMuted)
 
     Text {
         text: root.label
-        font.pixelSize: Theme.fontCaption
+        font.pixelSize: Theme.fontBody
         color: Theme.textSecondary
-        Layout.preferredWidth: 60
+        Layout.preferredWidth: 64
     }
 
     Slider {
@@ -31,7 +31,7 @@ RowLayout {
         enabled: !root.muted
 
         onMoved: {
-            root.valueChanged(value)
+            root.volumeChanged(value)
         }
 
         background: Rectangle {
@@ -55,43 +55,49 @@ RowLayout {
         handle: Rectangle {
             x: slider.leftPadding + slider.visualPosition * (slider.availableWidth - width)
             y: slider.topPadding + slider.availableHeight / 2 - height / 2
-            implicitWidth: 16
-            implicitHeight: 16
-            radius: 8
+            implicitWidth: 18
+            implicitHeight: 18
+            radius: 9
             color: root.muted ? Theme.textSecondary : Theme.accent
-            border.color: Theme.border
-            border.width: 1
+            border.color: root.muted ? "#C0C0C0" : "#3A7BC8"
+            border.width: 2
+
+            Behavior on scale { NumberAnimation { duration: 100 } }
+            scale: slider.pressed ? 1.15 : 1.0
         }
     }
 
     // Value display
     Text {
-        text: Math.round(root.value * 100) + "%"
-        font.pixelSize: Theme.fontCaption
+        text: Math.round(slider.value / root.to * 100) + "%"
+        font.pixelSize: Theme.fontBody
+        font.weight: Font.DemiBold
         color: root.muted ? Theme.textSecondary : Theme.textPrimary
-        Layout.preferredWidth: 40
+        Layout.preferredWidth: 44
         horizontalAlignment: Text.AlignRight
     }
 
     // Mute button
     Rectangle {
-        width: 28
-        height: 28
-        radius: Theme.smallRadius
-        color: root.muted ? Theme.error : "transparent"
-        border.color: root.muted ? Theme.error : Theme.border
-        border.width: 1
+        width: 32
+        height: 32
+        radius: 8
+        color: root.muted ? "#FFF0F0" : (muteArea.containsMouse ? Theme.navHover : "transparent")
+        border.color: root.muted ? Theme.error : "transparent"
+        border.width: root.muted ? 1 : 0
 
         Text {
             anchors.centerIn: parent
             text: root.muted ? "🔇" : "🔊"
-            font.pixelSize: 14
+            font.pixelSize: 15
         }
 
         MouseArea {
+            id: muteArea
             anchors.fill: parent
             cursorShape: Qt.PointingHandCursor
-            onClicked: root.mutedToggled(!root.muted)
+            hoverEnabled: true
+            onClicked: root.muteToggled(!root.muted)
         }
     }
 }

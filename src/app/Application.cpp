@@ -3,6 +3,7 @@
 #include "bluetooth/BluetoothManager.h"
 #include "audio/DeviceEnumerator.h"
 #include "audio/AudioEngine.h"
+#include "audio/SessionVolumeController.h"
 #include "system/SystemChecker.h"
 
 namespace BlueDrop {
@@ -40,6 +41,9 @@ bool Application::initialize()
 
     // Step 4: Audio engine
     m_audioEngine = std::make_unique<AudioEngine>(this);
+
+    // Step 5: Session volume controller (for BT audio volume)
+    m_sessionVolume = std::make_unique<SessionVolumeController>(this);
 
     return true;
 }

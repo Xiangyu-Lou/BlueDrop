@@ -15,6 +15,8 @@ set(BLUEDROP_CORE_SOURCES
     audio/AudioRenderStream.cpp
     audio/AudioEngine.h
     audio/AudioEngine.cpp
+    audio/SessionVolumeController.h
+    audio/SessionVolumeController.cpp
     bluetooth/BluetoothTypes.h
     bluetooth/BluetoothManager.h
     bluetooth/BluetoothManager.cpp
@@ -67,7 +69,9 @@ qt_add_qml_module(BlueDrop
         qml/components/DeviceCard.qml
         qml/components/MixerCard.qml
         qml/components/VolumeSlider.qml
+        qml/components/StyledComboBox.qml
         qml/pages/HomePage.qml
+        qml/pages/BroadcastPage.qml
         qml/pages/SettingsPage.qml
     RESOURCES
         qml/theme/qmldir
@@ -91,5 +95,5 @@ if(MSVC)
 endif()
 
 set_target_properties(BlueDrop PROPERTIES
-    WIN32_EXECUTABLE TRUE
+    WIN32_EXECUTABLE FALSE
 )

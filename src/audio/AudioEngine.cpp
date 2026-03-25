@@ -3,6 +3,7 @@
 #include "AudioRenderStream.h"
 #include "RingBuffer.h"
 #include "Resampler.h"
+#include "system/Logger.h"
 
 #include <Windows.h>
 #include <avrt.h>
@@ -63,10 +64,19 @@ void AudioEngine::setMicMuted(bool muted) {
 
 void AudioEngine::start()
 {
-    if (m_running.load()) return;
+    if (m_running.load()) {
+        LOG_WARN("AudioEngine already running");
+        return;
+    }
+
+    LOG_INFOF("AudioEngine::start() loopback=%s mic=%s vcable=%s",
+              qPrintable(m_loopbackDeviceId),
+              qPrintable(m_micDeviceId),
+              qPrintable(m_virtualCableDeviceId));
 
     // Validate device IDs
     if (m_virtualCableDeviceId.isEmpty()) {
+        LOG_ERROR("No virtual cable device set");
         emit errorOccurred(QString::fromUtf8(u8"未设置虚拟声卡输出设备"));
         return;
     }
@@ -78,6 +88,7 @@ void AudioEngine::start()
     });
 
     m_running.store(true);
+    LOG_INFO("AudioEngine started");
 }
 
 void AudioEngine::stop()

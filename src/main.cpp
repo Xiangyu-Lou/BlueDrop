@@ -1,9 +1,14 @@
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
+#include <QTimer>
 #include <Windows.h>
+#include <csignal>
 
 #include "app/Application.h"
+#include "system/Logger.h"
+#include "bluetooth/BluetoothManager.h"
+#include "audio/DeviceEnumerator.h"
 #include "viewmodel/BluetoothVM.h"
 #include "viewmodel/DeviceVM.h"
 #include "viewmodel/MixerVM.h"
@@ -12,10 +17,55 @@
 using namespace Qt::StringLiterals;
 using namespace BlueDrop;
 
+// Global crash handlers to capture the cause before process dies
+static void terminateHandler() {
+    LOG_ERROR("std::terminate() called!");
+    Logger::instance().disable(); // flush
+    std::abort();
+}
+
+static void signalHandler(int sig) {
+    LOG_ERRORF("Signal caught: %d", sig);
+    Logger::instance().disable();
+    std::abort();
+}
+
+static LONG WINAPI sehHandler(EXCEPTION_POINTERS* ep) {
+    if (ep && ep->ExceptionRecord) {
+        LOG_ERRORF("SEH exception: 0x%08X at addr 0x%p",
+                   ep->ExceptionRecord->ExceptionCode,
+                   ep->ExceptionRecord->ExceptionAddress);
+    } else {
+        LOG_ERROR("SEH exception (no details)");
+    }
+    Logger::instance().disable();
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+
 int main(int argc, char* argv[])
 {
-    // Initialize COM for WASAPI and other COM-based APIs
-    CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    // Enable logging if env BLUEDROP_LOG=1 or --log argument present
+    bool enableLog = qEnvironmentVariableIntValue("BLUEDROP_LOG") == 1;
+    for (int i = 1; i < argc; ++i) {
+        if (QString::fromUtf8(argv[i]) == "--log") {
+            enableLog = true;
+            break;
+        }
+    }
+    if (enableLog) {
+        Logger::instance().enable("bluedrop_debug.log");
+        Logger::installQtHandler();
+        LOG_INFO("BlueDrop starting (log enabled)");
+
+        // Install crash handlers
+        std::set_terminate(terminateHandler);
+        std::signal(SIGSEGV, signalHandler);
+        std::signal(SIGABRT, signalHandler);
+        SetUnhandledExceptionFilter(sehHandler);
+    }
+
+    // Use Basic style for full control customization support
+    qputenv("QT_QUICK_CONTROLS_STYLE", "Basic");
 
     QGuiApplication app(argc, argv);
     app.setApplicationName("BlueDrop");
@@ -26,18 +76,36 @@ int main(int argc, char* argv[])
     // Initialize application core
     Application bluedrop;
     if (!bluedrop.initialize()) {
-        // Show error and exit - for now just log
-        qCritical("Initialization failed: %s",
+        LOG_ERRORF("Initialization failed: %s",
                    qPrintable(bluedrop.checkResult().failureMessage));
-        CoUninitialize();
         return 1;
     }
+    LOG_INFO("Application initialized");
 
     // Create ViewModels
     BluetoothVM bluetoothVM(bluedrop.bluetooth());
     DeviceVM deviceVM(bluedrop.deviceEnumerator(), bluedrop.audioEngine());
-    MixerVM mixerVM(bluedrop.audioEngine());
+    MixerVM mixerVM(bluedrop.audioEngine(), bluedrop.sessionVolume());
     SettingsVM settingsVM(bluedrop.checkResult());
+
+    // When BT connects, auto-scan for BT audio session on monitor endpoint
+    QObject::connect(bluedrop.bluetooth(), &BluetoothManager::stateChanged,
+        &mixerVM, [&](BluetoothConnectionState state) {
+            if (state == BluetoothConnectionState::Connected) {
+                // Delay scan slightly to let Windows create the audio session
+                QTimer::singleShot(1500, &mixerVM, [&]() {
+                    auto outputs = bluedrop.deviceEnumerator()->outputDevices();
+                    auto btName = bluedrop.bluetooth()->connectedDeviceName();
+                    // Scan on the default output endpoint (where BT audio plays)
+                    for (const auto& dev : outputs) {
+                        if (dev.isDefault) {
+                            mixerVM.scanBtSession(dev.id, btName);
+                            break;
+                        }
+                    }
+                });
+            }
+        });
 
     // Set up QML engine
     QQmlApplicationEngine engine;
@@ -49,7 +117,7 @@ int main(int argc, char* argv[])
     engine.rootContext()->setContextProperty("settingsVM", &settingsVM);
 
     // Load main QML
-    const QUrl url(u"qrc:/BlueDrop/qml/main.qml"_s);
+    const QUrl url(u"qrc:/qt/qml/BlueDrop/qml/main.qml"_s);
     QObject::connect(
         &engine, &QQmlApplicationEngine::objectCreationFailed,
         &app, []() { QCoreApplication::exit(-1); },
@@ -57,8 +125,11 @@ int main(int argc, char* argv[])
     );
     engine.load(url);
 
-    int result = app.exec();
+    if (engine.rootObjects().isEmpty()) {
+        LOG_ERROR("Failed to load QML");
+        return -1;
+    }
+    LOG_INFO("QML loaded, entering event loop");
 
-    CoUninitialize();
-    return result;
+    return app.exec();
 }

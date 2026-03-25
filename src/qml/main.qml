@@ -43,6 +43,7 @@ ApplicationWindow {
             Layout.margins: Theme.spacing
 
             HomePage {}
+            BroadcastPage {}
             SettingsPage {}
         }
     }
