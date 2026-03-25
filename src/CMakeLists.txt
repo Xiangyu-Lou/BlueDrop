@@ -7,6 +7,14 @@ set(BLUEDROP_CORE_SOURCES
     system/SystemChecker.cpp
     audio/DeviceEnumerator.h
     audio/DeviceEnumerator.cpp
+    audio/RingBuffer.h
+    audio/Resampler.h
+    audio/AudioCaptureStream.h
+    audio/AudioCaptureStream.cpp
+    audio/AudioRenderStream.h
+    audio/AudioRenderStream.cpp
+    audio/AudioEngine.h
+    audio/AudioEngine.cpp
     bluetooth/BluetoothTypes.h
     bluetooth/BluetoothManager.h
     bluetooth/BluetoothManager.cpp

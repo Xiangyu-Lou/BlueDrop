@@ -49,9 +49,37 @@ if(BUILD_TESTS)
         target_compile_options(test_bluetooth_manager PRIVATE /utf-8 /W4 /wd4100 /bigobj)
     endif()
 
+    # RingBuffer tests
+    add_executable(test_ring_buffer
+        test_ring_buffer.cpp
+    )
+    target_link_libraries(test_ring_buffer PRIVATE
+        GTest::gtest
+        GTest::gtest_main
+        BlueDrop_core
+    )
+    if(MSVC)
+        target_compile_options(test_ring_buffer PRIVATE /utf-8 /W4 /wd4100)
+    endif()
+
+    # AudioEngine tests
+    add_executable(test_audio_engine
+        test_audio_engine.cpp
+    )
+    target_link_libraries(test_audio_engine PRIVATE
+        GTest::gtest
+        GTest::gtest_main
+        BlueDrop_core
+    )
+    if(MSVC)
+        target_compile_options(test_audio_engine PRIVATE /utf-8 /W4 /wd4100)
+    endif()
+
     include(GoogleTest)
     gtest_discover_tests(BlueDrop_tests)
     gtest_discover_tests(test_system_checker)
     gtest_discover_tests(test_device_enumerator)
     gtest_discover_tests(test_bluetooth_manager)
+    gtest_discover_tests(test_ring_buffer)
+    gtest_discover_tests(test_audio_engine)
 endif()
