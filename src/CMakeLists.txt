@@ -61,6 +61,16 @@ qt_add_qml_module(BlueDrop
     VERSION 1.0
     QML_FILES
         qml/main.qml
+        qml/theme/Theme.qml
+        qml/components/NavSidebar.qml
+        qml/components/StatusCard.qml
+        qml/components/DeviceCard.qml
+        qml/components/MixerCard.qml
+        qml/components/VolumeSlider.qml
+        qml/pages/HomePage.qml
+        qml/pages/SettingsPage.qml
+    RESOURCES
+        qml/theme/qmldir
 )
 
 target_link_libraries(BlueDrop PRIVATE
