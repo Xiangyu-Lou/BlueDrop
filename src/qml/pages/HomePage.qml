@@ -16,67 +16,6 @@ ScrollView {
             Layout.fillWidth: true
         }
 
-        // Output device selection
-        Rectangle {
-            Layout.fillWidth: true
-            radius: Theme.cardRadius
-            color: Theme.cardBackground
-            implicitHeight: deviceContent.implicitHeight + Theme.cardPadding * 2
-
-            Rectangle {
-                anchors.fill: parent
-                anchors.margins: -1
-                z: -1
-                radius: Theme.cardRadius + 1
-                color: "transparent"
-                border.color: "#E0E0E4"
-                border.width: 1
-                opacity: 0.5
-            }
-
-            ColumnLayout {
-                id: deviceContent
-                anchors.fill: parent
-                anchors.margins: Theme.cardPadding
-                spacing: 12
-
-                Text {
-                    text: qsTr("输出设备")
-                    font.pixelSize: Theme.fontTitle
-                    font.weight: Font.DemiBold
-                    color: Theme.textPrimary
-                }
-
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 6
-
-                    Text {
-                        text: qsTr("本地监听耳机")
-                        font.pixelSize: Theme.fontCaption
-                        color: Theme.textSecondary
-                    }
-
-                    StyledComboBox {
-                        Layout.fillWidth: true
-                        model: deviceVM ? deviceVM.outputDeviceNames : []
-                        currentIndex: deviceVM ? deviceVM.selectedMonitorIndex : -1
-                        onActivated: (index) => {
-                            if (deviceVM) deviceVM.selectedMonitorIndex = index
-                        }
-                    }
-
-                    Text {
-                        Layout.fillWidth: true
-                        text: qsTr("推荐使用跟随系统默认")
-                        font.pixelSize: Theme.fontSmall
-                        color: Theme.textSecondary
-                        wrapMode: Text.WordWrap
-                    }
-                }
-            }
-        }
-
         // Monitor volume (phone audio)
         Rectangle {
             Layout.fillWidth: true

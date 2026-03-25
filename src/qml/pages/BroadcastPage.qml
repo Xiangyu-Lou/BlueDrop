@@ -66,6 +66,34 @@ ScrollView {
                     Layout.fillWidth: true
                     spacing: 6
 
+                    Text {
+                        text: qsTr("蓝牙音频来源设备")
+                        font.pixelSize: Theme.fontCaption
+                        color: Theme.textSecondary
+                    }
+
+                    StyledComboBox {
+                        Layout.fillWidth: true
+                        model: deviceVM ? deviceVM.outputDeviceNames : []
+                        currentIndex: deviceVM ? deviceVM.selectedMonitorIndex : -1
+                        onActivated: (index) => {
+                            if (deviceVM) deviceVM.selectedMonitorIndex = index
+                        }
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: qsTr("选择蓝牙音频正在播放的输出设备，以便录音引擎从中捕获")
+                        font.pixelSize: Theme.fontSmall
+                        color: Theme.textSecondary
+                        wrapMode: Text.WordWrap
+                    }
+                }
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 6
+
                     RowLayout {
                         spacing: 8
                         Text {
