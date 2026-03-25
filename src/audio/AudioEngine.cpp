@@ -417,10 +417,12 @@ void AudioEngine::startBoost(const QString& captureDeviceId,
                           zeroCapCount);
             }
 
-            // Sleep 5ms — shorter than Sleep(8) to reduce period accumulation.
-            // With ~5ms sleep + ~5ms overhead = ~10ms per loop, matching the
-            // WASAPI 10ms capture period and minimising buffer backlog.
-            Sleep(5);
+            // Sleep 8ms — slightly less than the 10ms WASAPI period.
+            // With ~8ms sleep + ~7ms overhead ≈ 15ms per loop, we reliably
+            // cross at least one full 10ms capture period and always find data.
+            // Shorter sleeps (e.g. 5ms) risk polling before a period completes,
+            // getting 0 frames and leaving the render buffer underfed.
+            Sleep(8);
         }
 
         capture->stop();
