@@ -72,7 +72,7 @@ int main(int argc, char* argv[])
     QGuiApplication app(argc, argv);
     app.setApplicationName("BlueDrop");
     app.setApplicationDisplayName(u"聚音 BlueDrop"_s);
-    app.setApplicationVersion("0.1.0");
+    app.setApplicationVersion("0.1.1");
     app.setOrganizationName("BlueDrop");
 
     // Load embedded Noto Sans SC font
