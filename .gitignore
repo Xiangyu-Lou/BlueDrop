@@ -22,10 +22,6 @@
 *.dylib
 *.dll
 
-# Fortran module files
-*.mod
-*.smod
-
 # Compiled Static libraries
 *.lai
 *.la
@@ -36,6 +32,30 @@
 *.exe
 *.out
 *.app
+*.exp
 
-# debug information files
-*.dwo
+# Build artifacts
+build/
+out/
+cmake-build-*/
+
+# IDE
+.vs/
+.vscode/
+*.user
+*.suo
+CMakeUserPresets.json
+
+# Qt generated
+moc_*.cpp
+ui_*.h
+qrc_*.cpp
+*_qmltyperegistrations.cpp
+.qml_cache/
+.qmlc
+.jsc
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store

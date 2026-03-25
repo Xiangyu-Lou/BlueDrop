@@ -1,0 +1,47 @@
+{
+    "version": 6,
+    "configurePresets": [
+        {
+            "name": "default",
+            "displayName": "MSVC 2022 x64 Debug",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_TOOLCHAIN_FILE": "F:/Project/vcpkg/scripts/buildsystems/vcpkg.cmake",
+                "Qt6_ROOT": "A:/Qt/6.11.0/msvc2022_64",
+                "CMAKE_PREFIX_PATH": "A:/Qt/6.11.0/msvc2022_64"
+            },
+            "environment": {
+                "VCPKG_ROOT": "F:/Project/vcpkg"
+            }
+        },
+        {
+            "name": "release",
+            "displayName": "MSVC 2022 x64 Release",
+            "inherits": "default",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "default",
+            "configurePreset": "default"
+        },
+        {
+            "name": "release",
+            "configurePreset": "release"
+        }
+    ],
+    "testPresets": [
+        {
+            "name": "default",
+            "configurePreset": "default",
+            "output": {
+                "outputOnFailure": true
+            }
+        }
+    ]
+}

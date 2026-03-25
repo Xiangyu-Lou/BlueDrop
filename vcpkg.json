@@ -1,0 +1,8 @@
+{
+    "name": "bluedrop",
+    "version": "0.1.0",
+    "description": "Audio routing and mixing software for Bluetooth A2DP streaming",
+    "dependencies": [
+        "gtest"
+    ]
+}
