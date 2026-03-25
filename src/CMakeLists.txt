@@ -77,6 +77,15 @@ qt_add_qml_module(BlueDrop
         qml/theme/qmldir
 )
 
+# Embed font files as Qt resources
+qt_add_resources(BlueDrop "fonts"
+    PREFIX "/fonts"
+    BASE "${CMAKE_SOURCE_DIR}/resources/fonts"
+    FILES
+        "${CMAKE_SOURCE_DIR}/resources/fonts/NotoSansSC-Regular.ttf"
+        "${CMAKE_SOURCE_DIR}/resources/fonts/NotoSansSC-Medium.ttf"
+)
+
 target_link_libraries(BlueDrop PRIVATE
     BlueDrop_core
     Qt6::Gui

@@ -1,6 +1,8 @@
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
+#include <QFontDatabase>
+#include <QFont>
 #include <QTimer>
 #include <Windows.h>
 #include <csignal>
@@ -72,6 +74,20 @@ int main(int argc, char* argv[])
     app.setApplicationDisplayName(u"聚音 BlueDrop"_s);
     app.setApplicationVersion("0.1.0");
     app.setOrganizationName("BlueDrop");
+
+    // Load embedded Noto Sans SC font
+    int regularId = QFontDatabase::addApplicationFont(u":/fonts/NotoSansSC-Regular.ttf"_s);
+    int mediumId = QFontDatabase::addApplicationFont(u":/fonts/NotoSansSC-Medium.ttf"_s);
+    QString fontFamily = "Noto Sans CJK SC";
+    if (regularId >= 0) {
+        auto families = QFontDatabase::applicationFontFamilies(regularId);
+        if (!families.isEmpty()) fontFamily = families.first();
+    }
+    QFont defaultFont(fontFamily, 10);
+    defaultFont.setHintingPreference(QFont::PreferNoHinting);
+    app.setFont(defaultFont);
+    LOG_INFOF("Font loaded: %s (regular=%d, medium=%d)",
+              qPrintable(fontFamily), regularId, mediumId);
 
     // Initialize application core
     Application bluedrop;

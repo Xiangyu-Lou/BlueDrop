@@ -31,6 +31,7 @@ QStringList DeviceVM::inputDeviceNames() const
 QStringList DeviceVM::outputDeviceNames() const
 {
     QStringList names;
+    names.append(QStringLiteral("跟随系统默认"));
     for (const auto& dev : m_enumerator->outputDevices()) {
         QString name = dev.displayName;
         if (dev.isVirtual) name += " [Virtual]";
@@ -88,22 +89,17 @@ void DeviceVM::onDevicesChanged()
         }
     }
 
-    // Auto-select default monitor output
-    if (m_selectedMonitorIndex < 0 || m_selectedMonitorIndex >= outputs.size()) {
-        for (int i = 0; i < outputs.size(); i++) {
-            if (outputs[i].isDefault) {
-                m_selectedMonitorIndex = i;
-                emit selectedMonitorChanged();
-                break;
-            }
-        }
+    // Auto-select default monitor output: index 0 = "follow system"
+    if (m_selectedMonitorIndex < 0) {
+        m_selectedMonitorIndex = 0;
+        emit selectedMonitorChanged();
     }
 
-    // Auto-select VB-Cable for virtual output
-    if (m_selectedVirtualIndex < 0 || m_selectedVirtualIndex >= outputs.size()) {
+    // Auto-select VB-Cable for virtual output (offset +1 for "follow system" item)
+    if (m_selectedVirtualIndex < 0 || m_selectedVirtualIndex > outputs.size()) {
         for (int i = 0; i < outputs.size(); i++) {
             if (outputs[i].isVirtual) {
-                m_selectedVirtualIndex = i;
+                m_selectedVirtualIndex = i + 1;
                 emit selectedVirtualChanged();
                 break;
             }
@@ -125,13 +121,28 @@ void DeviceVM::applyDeviceSelection()
     }
 
     // Set loopback device (monitor output where BT audio plays)
-    if (m_selectedMonitorIndex >= 0 && m_selectedMonitorIndex < outputs.size()) {
-        m_engine->setLoopbackDevice(outputs[m_selectedMonitorIndex].id);
+    // index 0 = "follow system default", index >= 1 = specific device (offset by 1)
+    if (m_selectedMonitorIndex == 0) {
+        // Find system default
+        for (const auto& dev : outputs) {
+            if (dev.isDefault) {
+                m_engine->setLoopbackDevice(dev.id);
+                break;
+            }
+        }
+    } else {
+        int devIdx = m_selectedMonitorIndex - 1;
+        if (devIdx >= 0 && devIdx < outputs.size()) {
+            m_engine->setLoopbackDevice(outputs[devIdx].id);
+        }
     }
 
-    // Set virtual cable output
-    if (m_selectedVirtualIndex >= 0 && m_selectedVirtualIndex < outputs.size()) {
-        m_engine->setVirtualCableDevice(outputs[m_selectedVirtualIndex].id);
+    // Set virtual cable output (also offset by 1 for "follow system" item)
+    {
+        int devIdx = m_selectedVirtualIndex - 1;
+        if (devIdx >= 0 && devIdx < outputs.size()) {
+            m_engine->setVirtualCableDevice(outputs[devIdx].id);
+        }
     }
 }
 

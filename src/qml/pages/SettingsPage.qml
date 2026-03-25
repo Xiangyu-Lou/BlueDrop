@@ -28,7 +28,7 @@ ScrollView {
                 Text {
                     text: qsTr("系统信息")
                     font.pixelSize: Theme.fontTitle
-                    font.bold: true
+                    font.weight: Font.DemiBold
                     color: Theme.textPrimary
                 }
 
@@ -98,7 +98,7 @@ ScrollView {
                 Text {
                     text: qsTr("关于")
                     font.pixelSize: Theme.fontTitle
-                    font.bold: true
+                    font.weight: Font.DemiBold
                     color: Theme.textPrimary
                 }
 

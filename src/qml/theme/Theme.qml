@@ -27,9 +27,12 @@ QtObject {
     readonly property int sidebarWidth: 220
     readonly property int cardPadding: 24
 
+    // Font - Noto Sans CJK SC (embedded)
+    readonly property string fontFamily: "Noto Sans CJK SC"
+
     // Font sizes
-    readonly property int fontTitle: 17
-    readonly property int fontBody: 14
+    readonly property int fontTitle: 16
+    readonly property int fontBody: 13
     readonly property int fontCaption: 12
     readonly property int fontSmall: 11
 }

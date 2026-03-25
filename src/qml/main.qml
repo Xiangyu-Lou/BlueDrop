@@ -14,6 +14,8 @@ ApplicationWindow {
     minimumHeight: 480
     title: qsTr("聚音 BlueDrop")
     color: Theme.background
+    font.family: Theme.fontFamily
+    font.pixelSize: Theme.fontBody
 
     RowLayout {
         anchors.fill: parent

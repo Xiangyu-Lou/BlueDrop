@@ -19,7 +19,7 @@ Rectangle {
         Text {
             text: qsTr("音频设备")
             font.pixelSize: Theme.fontTitle
-            font.bold: true
+            font.weight: Font.DemiBold
             color: Theme.textPrimary
         }
 

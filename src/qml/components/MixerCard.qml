@@ -20,7 +20,7 @@ Rectangle {
         Text {
             text: qsTr("监听音量")
             font.pixelSize: Theme.fontTitle
-            font.bold: true
+            font.weight: Font.DemiBold
             color: Theme.textPrimary
         }
 
@@ -60,7 +60,7 @@ Rectangle {
             Text {
                 text: qsTr("广播混音")
                 font.pixelSize: Theme.fontTitle
-                font.bold: true
+                font.weight: Font.DemiBold
                 color: Theme.textPrimary
                 Layout.fillWidth: true
             }
