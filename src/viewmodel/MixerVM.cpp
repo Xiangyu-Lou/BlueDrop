@@ -119,6 +119,13 @@ void MixerVM::setBoostGain(float v) {
     emit boostGainChanged();
 }
 
+void MixerVM::setBoostMuted(bool v) {
+    if (m_boostMuted == v) return;
+    m_boostMuted = v;
+    m_engine->setBoostGain(v ? 0.0f : m_boostGain);
+    emit boostMutedChanged();
+}
+
 void MixerVM::setBoostEnabled(bool v) {
     if (m_boostEnabled == v) return;
 

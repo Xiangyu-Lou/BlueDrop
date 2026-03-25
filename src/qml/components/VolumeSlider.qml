@@ -11,6 +11,8 @@ RowLayout {
     property bool muted: false
     property real from: 0.0
     property real to: 2.0
+    property bool showMute: true
+    property string displayValue: Math.round(slider.value / root.to * 100) + "%"
 
     signal volumeChanged(real newValue)
     signal muteToggled(bool newMuted)
@@ -19,7 +21,6 @@ RowLayout {
         text: root.label
         font.pixelSize: Theme.fontBody
         color: Theme.textSecondary
-        Layout.preferredWidth: 64
     }
 
     Slider {
@@ -69,7 +70,7 @@ RowLayout {
 
     // Value display
     Text {
-        text: Math.round(slider.value / root.to * 100) + "%"
+        text: root.displayValue
         font.pixelSize: Theme.fontBody
         font.weight: Font.DemiBold
         color: root.muted ? Theme.textSecondary : Theme.textPrimary
@@ -79,6 +80,7 @@ RowLayout {
 
     // Mute button
     Rectangle {
+        visible: root.showMute
         width: 32
         height: 32
         radius: 8

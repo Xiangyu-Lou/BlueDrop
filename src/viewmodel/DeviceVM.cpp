@@ -19,6 +19,7 @@ DeviceVM::DeviceVM(DeviceEnumerator* enumerator, AudioEngine* engine, QObject* p
 QStringList DeviceVM::inputDeviceNames() const
 {
     QStringList names;
+    names.append(QStringLiteral("跟随系统默认"));
     for (const auto& dev : m_enumerator->inputDevices()) {
         QString name = dev.displayName;
         if (dev.isVirtual) name += " [Virtual]";
@@ -78,15 +79,10 @@ void DeviceVM::onDevicesChanged()
     auto inputs = m_enumerator->inputDevices();
     auto outputs = m_enumerator->outputDevices();
 
-    // Auto-select default mic
-    if (m_selectedMicIndex < 0 || m_selectedMicIndex >= inputs.size()) {
-        for (int i = 0; i < inputs.size(); i++) {
-            if (inputs[i].isDefault && !inputs[i].isVirtual) {
-                m_selectedMicIndex = i;
-                emit selectedMicChanged();
-                break;
-            }
-        }
+    // Auto-select mic: default to index 0 = "follow system default"
+    if (m_selectedMicIndex < 0) {
+        m_selectedMicIndex = 0;
+        emit selectedMicChanged();
     }
 
     // Auto-select default monitor output: index 0 = "follow system"
@@ -116,8 +112,19 @@ void DeviceVM::applyDeviceSelection()
     auto outputs = m_enumerator->outputDevices();
 
     // Set mic device
-    if (m_selectedMicIndex >= 0 && m_selectedMicIndex < inputs.size()) {
-        m_engine->setMicrophoneDevice(inputs[m_selectedMicIndex].id);
+    // index 0 = "follow system default", index >= 1 = specific device (offset by 1)
+    if (m_selectedMicIndex == 0) {
+        for (const auto& dev : inputs) {
+            if (dev.isDefault && !dev.isVirtual) {
+                m_engine->setMicrophoneDevice(dev.id);
+                break;
+            }
+        }
+    } else {
+        int devIdx = m_selectedMicIndex - 1;
+        if (devIdx >= 0 && devIdx < inputs.size()) {
+            m_engine->setMicrophoneDevice(inputs[devIdx].id);
+        }
     }
 
     // Set loopback device (monitor output where BT audio plays)

@@ -42,9 +42,12 @@ bool SystemChecker::checkOsVersion(SystemCheckResult& result)
     }
 
     result.osBuildNumber = osvi.dwBuildNumber;
-    result.osVersionString = QString("Windows %1.%2 Build %3")
-        .arg(osvi.dwMajorVersion)
-        .arg(osvi.dwMinorVersion)
+    // Windows 11 reports major=10 but build >= 22000
+    QString winName = (osvi.dwMajorVersion == 10 && osvi.dwBuildNumber >= 22000)
+                      ? QStringLiteral("11")
+                      : QString::number(osvi.dwMajorVersion);
+    result.osVersionString = QString("Windows %1 Build %2")
+        .arg(winName)
         .arg(osvi.dwBuildNumber);
 
     result.osVersionOk = (osvi.dwMajorVersion >= 10 && osvi.dwBuildNumber >= MIN_BUILD_NUMBER);

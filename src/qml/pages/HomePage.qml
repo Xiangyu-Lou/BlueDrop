@@ -151,12 +151,14 @@ ScrollView {
                 VolumeSlider {
                     Layout.fillWidth: true
                     visible: mixerVM && mixerVM.boostEnabled
-                    label: qsTr("手机音频 (增益)")
+                    label: qsTr("增益")
                     value: mixerVM ? mixerVM.boostGain : 1.0
-                    muted: false
+                    muted: mixerVM ? mixerVM.boostMuted : false
                     from: 0.0
                     to: 10.0
+                    displayValue: Math.round(value * 100) + "%"
                     onVolumeChanged: (v) => { if (mixerVM) mixerVM.boostGain = v }
+                    onMuteToggled: (m) => { if (mixerVM) mixerVM.boostMuted = m }
                 }
 
                 // Status hints

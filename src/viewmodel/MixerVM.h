@@ -28,6 +28,7 @@ class MixerVM : public QObject {
     // Boost mode (Route A amplification beyond 100%)
     Q_PROPERTY(bool boostEnabled READ boostEnabled WRITE setBoostEnabled NOTIFY boostEnabledChanged)
     Q_PROPERTY(float boostGain READ boostGain WRITE setBoostGain NOTIFY boostGainChanged)
+    Q_PROPERTY(bool boostMuted READ boostMuted WRITE setBoostMuted NOTIFY boostMutedChanged)
     Q_PROPERTY(bool boostAvailable READ boostAvailable NOTIFY boostAvailableChanged)
 public:
     explicit MixerVM(AudioEngine* engine, SessionVolumeController* sessionVol,
@@ -48,6 +49,7 @@ public:
 
     bool boostEnabled() const { return m_boostEnabled; }
     float boostGain() const { return m_boostGain; }
+    bool boostMuted() const { return m_boostMuted; }
     bool boostAvailable() const;  // true if VB-Cable installed
 
     void setPhoneVolume(float v);
@@ -61,6 +63,7 @@ public:
 
     void setBoostEnabled(bool v);
     void setBoostGain(float v);
+    void setBoostMuted(bool v);
 
     Q_INVOKABLE void startEngine();
     Q_INVOKABLE void stopEngine();
@@ -82,6 +85,7 @@ signals:
     void btSessionFoundChanged();
     void boostEnabledChanged();
     void boostGainChanged();
+    void boostMutedChanged();
     void boostAvailableChanged();
 
 private:
@@ -95,6 +99,7 @@ private:
     // Boost state
     bool m_boostEnabled = false;
     float m_boostGain = 1.0f;
+    bool m_boostMuted = false;
     QString m_savedDefaultEndpoint;    // Saved before boost switches endpoint
     QString m_monitorDeviceId;         // Current monitor headphone device ID
 };
