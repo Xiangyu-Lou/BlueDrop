@@ -17,12 +17,18 @@ ApplicationWindow {
     font.family: Theme.fontFamily
     font.pixelSize: Theme.fontBody
 
-    // Restore saved state shortly after startup
+    // Restore saved state and handle first-launch help page
     Timer {
         interval: 200
         running: true
         repeat: false
-        onTriggered: { if (mixerVM) mixerVM.autoRestoreState() }
+        onTriggered: {
+            if (mixerVM) mixerVM.autoRestoreState()
+            if (settingsVM && settingsVM.consumeFirstLaunch()) {
+                pageStack.currentIndex = 3
+                sidebar.currentIndex = 3
+            }
+        }
     }
 
     // Intercept the window close button

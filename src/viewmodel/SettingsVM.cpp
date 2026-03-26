@@ -16,6 +16,15 @@ SettingsVM::SettingsVM(const SystemCheckResult& result, QObject* parent)
 {
 }
 
+bool SettingsVM::consumeFirstLaunch()
+{
+    QSettings s;
+    if (s.value("behavior/firstLaunchDone", false).toBool())
+        return false;
+    s.setValue("behavior/firstLaunchDone", true);
+    return true;
+}
+
 void SettingsVM::setCloseAction(const QString& action)
 {
     if (m_closeAction == action) return;

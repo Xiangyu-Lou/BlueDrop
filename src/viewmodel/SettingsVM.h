@@ -32,6 +32,9 @@ public:
     QString closeAction() const { return m_closeAction; }
     void setCloseAction(const QString& action);
 
+    // Returns true the first time ever called, false thereafter (persisted via QSettings)
+    Q_INVOKABLE bool consumeFirstLaunch();
+
 signals:
     void closeActionChanged();
 
