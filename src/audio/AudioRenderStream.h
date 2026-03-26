@@ -47,6 +47,11 @@ private:
     uint32_t m_bufferFrames = 0;
     bool m_isFloat = false;
     bool m_running = false;
+
+    // Diagnostic counters
+    uint32_t m_writeCount = 0;
+    uint32_t m_totalFramesWritten = 0;
+    uint32_t m_fullCount = 0;
 };
 
 } // namespace BlueDrop

@@ -223,6 +223,110 @@ ScrollView {
             }
         }
 
+        // Debug / Logging card
+        Rectangle {
+            Layout.fillWidth: true
+            radius: Theme.cardRadius
+            color: Theme.cardBackground
+            border.color: Theme.border
+            border.width: 1
+            implicitHeight: debugContent.implicitHeight + Theme.cardPadding * 2
+
+            ColumnLayout {
+                id: debugContent
+                anchors.fill: parent
+                anchors.margins: Theme.cardPadding
+                spacing: 12
+
+                Text {
+                    text: qsTr("调试日志")
+                    font.pixelSize: Theme.fontTitle
+                    font.weight: Font.DemiBold
+                    color: Theme.textPrimary
+                }
+
+                RowLayout {
+                    spacing: 8
+                    Text {
+                        text: qsTr("记录详细运行日志（用于问题诊断）")
+                        font.pixelSize: Theme.fontBody
+                        color: Theme.textPrimary
+                        Layout.fillWidth: true
+                    }
+                    Switch {
+                        checked: settingsVM ? settingsVM.loggingEnabled : false
+                        onToggled: { if (settingsVM) settingsVM.loggingEnabled = checked }
+                    }
+                }
+
+                Text {
+                    visible: settingsVM && settingsVM.loggingEnabled
+                    text: qsTr("日志路径：") + (settingsVM ? settingsVM.logFilePath : "")
+                    font.pixelSize: Theme.fontCaption
+                    color: Theme.textSecondary
+                    wrapMode: Text.WrapAnywhere
+                    Layout.fillWidth: true
+                }
+
+                RowLayout {
+                    visible: settingsVM && settingsVM.loggingEnabled
+                    spacing: 8
+
+                    Rectangle {
+                        height: 30
+                        implicitWidth: openFolderLabel.implicitWidth + 20
+                        radius: Theme.smallRadius
+                        color: openFolderArea.containsMouse ? Theme.navSelected : "#F0F0F2"
+
+                        Text {
+                            id: openFolderLabel
+                            anchors.centerIn: parent
+                            text: qsTr("打开文件夹")
+                            font.pixelSize: Theme.fontBody
+                            color: Theme.textPrimary
+                        }
+
+                        MouseArea {
+                            id: openFolderArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                if (settingsVM) {
+                                    var path = settingsVM.logFilePath
+                                    var dir = path.substring(0, path.lastIndexOf("/"))
+                                    Qt.openUrlExternally("file:///" + dir)
+                                }
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        height: 30
+                        implicitWidth: clearLogLabel.implicitWidth + 20
+                        radius: Theme.smallRadius
+                        color: clearLogArea.containsMouse ? Theme.navSelected : "#F0F0F2"
+
+                        Text {
+                            id: clearLogLabel
+                            anchors.centerIn: parent
+                            text: qsTr("清空日志")
+                            font.pixelSize: Theme.fontBody
+                            color: Theme.textPrimary
+                        }
+
+                        MouseArea {
+                            id: clearLogArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: { if (settingsVM) settingsVM.clearLog() }
+                        }
+                    }
+                }
+            }
+        }
+
         // About card
         Rectangle {
             Layout.fillWidth: true

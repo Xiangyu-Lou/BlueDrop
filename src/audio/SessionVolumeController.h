@@ -57,6 +57,7 @@ private:
     Microsoft::WRL::ComPtr<ISimpleAudioVolume> m_sessionVolume;
     QString m_sessionName;
     DWORD m_sessionPid = 0;
+    float m_lastLoggedVolume = -1.0f; // for log throttling
 };
 
 } // namespace BlueDrop

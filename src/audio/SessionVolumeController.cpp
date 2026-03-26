@@ -105,9 +105,8 @@ bool SessionVolumeController::findBluetoothSession(const QString& endpointId,
         AudioSessionState state;
         sessionCtrl->GetState(&state);
 
-        LOG_INFOF("  Session[%d]: pid=%lu name='%s' state=%d id='%s'",
-                  i, pid, qPrintable(name), static_cast<int>(state),
-                  qPrintable(sessIdStr.left(80)));
+        LOG_INFO(QString("  Session[%1]: pid=%2 name='%3' state=%4 id='%5'")
+                 .arg(i).arg(pid).arg(name).arg(static_cast<int>(state)).arg(sessIdStr.left(80)));
 
         // Heuristic: BT audio session matches if:
         // - Session ID or display name contains BT indicators
@@ -142,8 +141,8 @@ bool SessionVolumeController::findBluetoothSession(const QString& endpointId,
                 m_sessionVolume = volume;
                 m_sessionName = name.isEmpty() ? "Bluetooth Audio" : name;
                 m_sessionPid = pid;
-                LOG_INFOF("SessionVolumeController: found BT session: '%s' (pid=%lu)",
-                          qPrintable(m_sessionName), m_sessionPid);
+                LOG_INFO(QString("SessionVolumeController: found BT session: '%1' (pid=%2)")
+                         .arg(m_sessionName).arg(m_sessionPid));
                 emit sessionFound(m_sessionName);
                 return true;
             }
@@ -188,12 +187,22 @@ bool SessionVolumeController::findBluetoothSession(const QString& endpointId,
 
 void SessionVolumeController::setVolume(float volume)
 {
-    if (!m_sessionVolume) return;
+    if (!m_sessionVolume) {
+        LOG_WARNF("SessionVolumeController: setVolume(%.2f) — no session (call findBluetoothSession first)", volume);
+        return;
+    }
 
     float clamped = std::clamp(volume, 0.0f, 1.0f);
     HRESULT hr = m_sessionVolume->SetMasterVolume(clamped, nullptr);
     if (FAILED(hr)) {
-        LOG_ERRORF("SessionVolumeController: SetMasterVolume failed: 0x%08X", hr);
+        LOG_ERRORF("SessionVolumeController: SetMasterVolume(%.2f) failed: 0x%08X", clamped, hr);
+    } else {
+        // Only log when value changes by more than 2% to avoid slider-drag spam
+        if (std::abs(clamped - m_lastLoggedVolume) >= 0.02f) {
+            LOG_DEBUG(QString("SessionVolumeController: volume -> %1 (session='%2')")
+                      .arg(clamped, 0, 'f', 2).arg(m_sessionName));
+            m_lastLoggedVolume = clamped;
+        }
     }
 }
 
@@ -208,11 +217,18 @@ float SessionVolumeController::volume() const
 
 void SessionVolumeController::setMuted(bool muted)
 {
-    if (!m_sessionVolume) return;
+    if (!m_sessionVolume) {
+        LOG_WARNF("SessionVolumeController: setMuted(%s) — no session", muted ? "true" : "false");
+        return;
+    }
 
     HRESULT hr = m_sessionVolume->SetMute(muted ? TRUE : FALSE, nullptr);
     if (FAILED(hr)) {
-        LOG_ERRORF("SessionVolumeController: SetMute failed: 0x%08X", hr);
+        LOG_ERRORF("SessionVolumeController: SetMute(%s) failed: 0x%08X",
+                   muted ? "true" : "false", hr);
+    } else {
+        LOG_DEBUG(QString("SessionVolumeController: muted=%1 (session='%2')")
+                  .arg(muted ? "true" : "false").arg(m_sessionName));
     }
 }
 

@@ -18,6 +18,8 @@ class SettingsVM : public QObject {
     Q_PROPERTY(QString appVersion READ appVersion CONSTANT)
     // "": ask on close  "minimize": minimize to tray  "close": exit
     Q_PROPERTY(QString closeAction READ closeAction WRITE setCloseAction NOTIFY closeActionChanged)
+    Q_PROPERTY(bool loggingEnabled READ loggingEnabled WRITE setLoggingEnabled NOTIFY loggingEnabledChanged)
+    Q_PROPERTY(QString logFilePath READ logFilePath CONSTANT)
 public:
     explicit SettingsVM(const SystemCheckResult& result, QObject* parent = nullptr);
 
@@ -27,16 +29,23 @@ public:
     QString bluetoothAdapterName() const { return m_bluetoothAdapterName; }
     bool vbCableInstalled() const { return m_vbCableInstalled; }
     QString vbCableDeviceName() const { return m_vbCableDeviceName; }
-    QString appVersion() const { return "0.1.3"; }
+    QString appVersion() const { return "0.1.4"; }
 
     QString closeAction() const { return m_closeAction; }
     void setCloseAction(const QString& action);
+
+    bool loggingEnabled() const { return m_loggingEnabled; }
+    void setLoggingEnabled(bool enabled);
+    QString logFilePath() const;
+
+    Q_INVOKABLE void clearLog();
 
     // Returns true the first time ever called, false thereafter (persisted via QSettings)
     Q_INVOKABLE bool consumeFirstLaunch();
 
 signals:
     void closeActionChanged();
+    void loggingEnabledChanged();
 
 private:
     QString m_osVersion;
@@ -46,6 +55,7 @@ private:
     bool m_vbCableInstalled;
     QString m_vbCableDeviceName;
     QString m_closeAction;
+    bool m_loggingEnabled = false;
 };
 
 } // namespace BlueDrop

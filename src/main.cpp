@@ -16,6 +16,7 @@
 #include "viewmodel/DeviceVM.h"
 #include "viewmodel/MixerVM.h"
 #include "viewmodel/SettingsVM.h"
+#include "audio/SessionVolumeController.h"
 #include "app/TrayManager.h"
 
 using namespace Qt::StringLiterals;
@@ -74,7 +75,7 @@ int main(int argc, char* argv[])
     QApplication app(argc, argv);
     app.setApplicationName("BlueDrop");
     app.setApplicationDisplayName(u"聚音 BlueDrop"_s);
-    app.setApplicationVersion("0.1.3");
+    app.setApplicationVersion("0.1.4");
     app.setOrganizationName("BlueDrop");
     app.setWindowIcon(QIcon(":/icons/icon.png"));
 
@@ -122,6 +123,16 @@ int main(int argc, char* argv[])
                             mixerVM.scanBtSession(dev.id, btName);
                             break;
                         }
+                    }
+
+                    // Re-apply the current default endpoint to force Windows to
+                    // refresh audio routing. BT connection arrival can disrupt
+                    // the audio pipeline, causing the headphone output to go
+                    // silent until the user manually switches devices.
+                    QString currentDefault = SessionVolumeController::getDefaultPlaybackEndpoint();
+                    if (!currentDefault.isEmpty()) {
+                        LOG_INFO("Refreshing default audio endpoint to restore headphone routing");
+                        SessionVolumeController::setDefaultPlaybackEndpoint(currentDefault);
                     }
                 });
             }

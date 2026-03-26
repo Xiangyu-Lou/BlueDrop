@@ -9,15 +9,16 @@
 
 namespace BlueDrop {
 
-/// Simple file logger with runtime enable/disable.
+/// Simple file logger with runtime enable/disable and size-based rotation.
 /// Usage:
 ///   Logger::instance().enable("bluedrop.log");
 ///   LOG_INFO("something happened");
 ///   LOG_DEBUG("value = %d", 42);
 ///   Logger::instance().disable();
 ///
-/// Controlled by environment variable BLUEDROP_LOG=1 for auto-enable,
-/// or call enable()/disable() at runtime.
+/// When the log file exceeds maxFileSize (default 5 MB), the current file is
+/// renamed to "<name>.bak" (overwriting any previous backup) and a new file
+/// is started. At most two files exist at any time (~10 MB total).
 
 class Logger {
 public:
@@ -32,8 +33,10 @@ public:
     void enable(const QString& filePath = {}) {
         QMutexLocker lock(&m_mutex);
         if (m_enabled) return;
-        m_file.setFileName(filePath.isEmpty() ? QStringLiteral("bluedrop.log") : filePath);
-        m_file.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text);
+        m_filePath = filePath.isEmpty() ? QStringLiteral("bluedrop.log") : filePath;
+        m_file.setFileName(m_filePath);
+        (void)m_file.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text);
+        m_writeCount = 0;
         m_enabled = true;
         writeRaw("=== Log started " +
                  QDateTime::currentDateTime().toString(Qt::ISODate) + " ===\n");
@@ -52,6 +55,9 @@ public:
 
     void setLevel(Level level) { m_level = level; }
 
+    /// Maximum log file size in bytes before rotation (default 5 MB).
+    void setMaxFileSize(qint64 bytes) { m_maxFileSize = bytes; }
+
     void write(Level level, const char* file, int line, const QString& msg) {
         if (!m_enabled || level < m_level) return;
         QMutexLocker lock(&m_mutex);
@@ -64,7 +70,6 @@ public:
 
         // Include source location for debug/warning/error
         if (level != Info) {
-            // Extract just the filename from full path
             QString src = QString::fromUtf8(file);
             int slash = src.lastIndexOf('/');
             if (slash < 0) slash = src.lastIndexOf('\\');
@@ -73,6 +78,10 @@ public:
         }
         out << "\n";
         out.flush();
+
+        // Check file size every 200 writes to avoid per-call overhead
+        if (++m_writeCount % 200 == 0)
+            rotateIfNeeded();
     }
 
     /// Install as Qt message handler (captures qDebug/qWarning/qCritical)
@@ -90,6 +99,27 @@ private:
         out.flush();
     }
 
+    /// Rotate if the file exceeds m_maxFileSize.
+    /// Renames current file to "<path>.bak", opens a fresh file.
+    /// Called with m_mutex already held.
+    void rotateIfNeeded() {
+        if (m_file.size() < m_maxFileSize) return;
+
+        writeRaw("=== Log rotating — size limit reached " +
+                 QDateTime::currentDateTime().toString(Qt::ISODate) + " ===\n");
+        m_file.close();
+
+        QString bakPath = m_filePath + QStringLiteral(".bak");
+        QFile::remove(bakPath);
+        QFile::rename(m_filePath, bakPath);
+
+        m_file.setFileName(m_filePath);
+        (void)m_file.open(QIODevice::WriteOnly | QIODevice::Text);
+        m_writeCount = 0;
+        writeRaw("=== Log continued after rotation " +
+                 QDateTime::currentDateTime().toString(Qt::ISODate) + " ===\n");
+    }
+
     static void qtMessageHandler(QtMsgType type, const QMessageLogContext& ctx, const QString& msg) {
         Level level = Info;
         switch (type) {
@@ -105,10 +135,13 @@ private:
             abort();
     }
 
-    QFile m_file;
-    QMutex m_mutex;
-    Level m_level = Debug;
-    bool m_enabled = false;
+    QFile    m_file;
+    QString  m_filePath;
+    QMutex   m_mutex;
+    Level    m_level     = Debug;
+    bool     m_enabled   = false;
+    qint64   m_maxFileSize = 5LL * 1024 * 1024; // 5 MB
+    int      m_writeCount  = 0;
 };
 
 } // namespace BlueDrop

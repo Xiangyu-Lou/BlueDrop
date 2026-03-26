@@ -208,13 +208,16 @@ void BluetoothManager::onDeviceAdded(const QString& deviceId, const QString& dev
 
 void BluetoothManager::onDeviceRemoved(const QString& deviceId)
 {
-    LOG_INFOF("onDeviceRemoved: %s", qPrintable(deviceId));
     if (deviceId == m_connectedDeviceId) {
+        LOG_WARNF("Connected device removed: %s (%s) — will reconnect",
+                  qPrintable(m_connectedDeviceName), qPrintable(deviceId));
         if (m_impl->connection) {
             try { m_impl->connection.Close(); } catch (...) {}
             m_impl->connection = nullptr;
         }
         setState(BluetoothConnectionState::Reconnecting);
+    } else {
+        LOG_INFOF("onDeviceRemoved (non-connected): %s", qPrintable(deviceId));
     }
 }
 
@@ -285,7 +288,14 @@ void BluetoothManager::connectToDevice(const QString& deviceId, const QString& d
             auto result = connection.OpenAsync().get();
 
             auto status = result.Status();
-            LOG_INFOF("OpenAsync result: %d", static_cast<int>(status));
+            const char* statusName = "Unknown";
+            switch (status) {
+            case winrt_audio::AudioPlaybackConnectionOpenResultStatus::Success:       statusName = "Success"; break;
+            case winrt_audio::AudioPlaybackConnectionOpenResultStatus::RequestTimedOut: statusName = "RequestTimedOut"; break;
+            case winrt_audio::AudioPlaybackConnectionOpenResultStatus::DeniedBySystem:  statusName = "DeniedBySystem"; break;
+            case winrt_audio::AudioPlaybackConnectionOpenResultStatus::UnknownFailure:  statusName = "UnknownFailure"; break;
+            }
+            LOG_INFOF("OpenAsync result: %s (%d)", statusName, static_cast<int>(status));
 
             if (status == winrt_audio::AudioPlaybackConnectionOpenResultStatus::Success) {
                 m_impl->connection = std::move(connection);

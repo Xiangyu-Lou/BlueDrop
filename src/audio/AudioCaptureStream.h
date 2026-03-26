@@ -48,6 +48,12 @@ private:
     bool m_isFloat = false;
     bool m_isLoopback = false;
     bool m_running = false;
+
+    // Diagnostic counters
+    uint32_t m_packetCount = 0;
+    uint32_t m_frameCount = 0;
+    uint32_t m_silentCount = 0;
+    uint32_t m_emptyCount = 0;
 };
 
 } // namespace BlueDrop

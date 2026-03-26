@@ -70,7 +70,7 @@ void AudioEngine::start()
         return;
     }
 
-    LOG_INFOF("AudioEngine::start() loopback=%s mic=%s vcable=%s",
+    LOG_INFOF("AudioEngine::start() (Route-B broadcast) loopback=%s mic=%s vcable=%s",
               qPrintable(m_loopbackDeviceId),
               qPrintable(m_micDeviceId),
               qPrintable(m_virtualCableDeviceId));
@@ -96,6 +96,7 @@ void AudioEngine::stop()
 {
     if (!m_running.load()) return;
 
+    LOG_INFO("AudioEngine::stop() (Route-B broadcast)");
     m_stopRequested.store(true);
 
     if (m_audioThread.joinable()) {
@@ -140,7 +141,13 @@ void AudioEngine::audioThreadFunc()
         if (loopbackCapture->initialize(id.c_str(), true)) {
             loopbackCapture->start();
             hasLoopback = true;
+            LOG_INFOF("AudioThread: loopback capture OK — %uHz %uch",
+                      loopbackCapture->sampleRate(), loopbackCapture->channels());
+        } else {
+            LOG_ERROR("AudioThread: failed to initialize loopback capture");
         }
+    } else {
+        LOG_INFO("AudioThread: no loopback device — loopback capture skipped");
     }
 
     // Initialize mic capture
@@ -149,7 +156,13 @@ void AudioEngine::audioThreadFunc()
         if (micCapture->initialize(id.c_str(), false)) {
             micCapture->start();
             hasMic = true;
+            LOG_INFOF("AudioThread: mic capture OK — %uHz %uch",
+                      micCapture->sampleRate(), micCapture->channels());
+        } else {
+            LOG_ERROR("AudioThread: failed to initialize mic capture");
         }
+    } else {
+        LOG_INFO("AudioThread: no mic device — mic capture skipped");
     }
 
     // Initialize VB-Cable render output
@@ -158,17 +171,32 @@ void AudioEngine::audioThreadFunc()
         if (vcableRender->initialize(id.c_str())) {
             vcableRender->start();
             hasOutput = true;
+            LOG_INFOF("AudioThread: VB-Cable render OK — %uHz %uch bufferFrames=%u",
+                      vcableRender->sampleRate(), vcableRender->channels(), vcableRender->bufferFrames());
         } else {
+            LOG_ERROR("AudioThread: failed to initialize VB-Cable render");
             QMetaObject::invokeMethod(this, [this]() {
                 emit errorOccurred(QString::fromUtf8(u8"无法打开虚拟声卡输出设备"));
             }, Qt::QueuedConnection);
         }
     }
 
+    LOG_INFOF("AudioThread: starting loop — hasLoopback=%s hasMic=%s hasOutput=%s",
+              hasLoopback ? "yes" : "no",
+              hasMic ? "yes" : "no",
+              hasOutput ? "yes" : "no");
+
     // Processing buffers (interleaved stereo float32)
     std::vector<float> loopbackBuf(PROCESS_BUFFER_FRAMES * 2, 0.0f);
     std::vector<float> micBuf(PROCESS_BUFFER_FRAMES * 2, 0.0f);
     std::vector<float> mixBuf(PROCESS_BUFFER_FRAMES * 2, 0.0f);
+
+    // Diagnostic counters
+    uint32_t loopCount = 0;
+    uint32_t totalLoopbackFrames = 0;
+    uint32_t totalMicFrames = 0;
+    uint32_t totalOutFrames = 0;
+    uint32_t zeroOutCount = 0;
 
     // Main audio processing loop
     while (!m_stopRequested.load()) {
@@ -178,11 +206,13 @@ void AudioEngine::audioThreadFunc()
         // Read loopback (BT audio)
         if (hasLoopback) {
             loopbackFrames = loopbackCapture->readFrames(loopbackBuf.data(), PROCESS_BUFFER_FRAMES);
+            totalLoopbackFrames += static_cast<uint32_t>(loopbackFrames);
         }
 
         // Read microphone
         if (hasMic) {
             micFrames = micCapture->readFrames(micBuf.data(), PROCESS_BUFFER_FRAMES);
+            totalMicFrames += static_cast<uint32_t>(micFrames);
         }
 
         // Determine output frame count
@@ -204,12 +234,24 @@ void AudioEngine::audioThreadFunc()
 
             // Write to VB-Cable
             vcableRender->writeFrames(mixBuf.data(), outFrames);
+            totalOutFrames += static_cast<uint32_t>(outFrames);
+        } else {
+            zeroOutCount++;
+        }
+
+        // Periodic stats every 200 iterations (~1s at 5ms sleep)
+        if (++loopCount % 200 == 0) {
+            LOG_INFOF("AudioThread stats [iter %u]: loopbackFrames=%u micFrames=%u outFrames=%u zeroIter=%u",
+                      loopCount, totalLoopbackFrames, totalMicFrames, totalOutFrames, zeroOutCount);
         }
 
         // Sleep for ~5ms to avoid busy-waiting
         // WASAPI shared mode buffers are typically 10ms
         Sleep(5);
     }
+
+    LOG_INFOF("AudioThread: loop exited after %u iterations (loopbackFrames=%u micFrames=%u outFrames=%u)",
+              loopCount, totalLoopbackFrames, totalMicFrames, totalOutFrames);
 
     // Cleanup
     if (hasLoopback) loopbackCapture->stop();
