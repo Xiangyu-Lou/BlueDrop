@@ -80,6 +80,149 @@ ScrollView {
             }
         }
 
+        // Close behavior card
+        Rectangle {
+            Layout.fillWidth: true
+            radius: Theme.cardRadius
+            color: Theme.cardBackground
+            border.color: Theme.border
+            border.width: 1
+            implicitHeight: closeContent.implicitHeight + Theme.cardPadding * 2
+
+            ColumnLayout {
+                id: closeContent
+                anchors.fill: parent
+                anchors.margins: Theme.cardPadding
+                spacing: 16
+
+                Text {
+                    text: qsTr("关闭行为")
+                    font.pixelSize: Theme.fontTitle
+                    font.weight: Font.DemiBold
+                    color: Theme.textPrimary
+                }
+
+                Text {
+                    text: qsTr("点击窗口关闭按钮时的默认行为")
+                    font.pixelSize: Theme.fontBody
+                    color: Theme.textSecondary
+                }
+
+                // Segmented control
+                RowLayout {
+                    spacing: 8
+
+                    Repeater {
+                        model: [
+                            { label: qsTr("每次询问"),    value: ""         },
+                            { label: qsTr("最小化到托盘"), value: "minimize" },
+                            { label: qsTr("退出程序"),    value: "close"    }
+                        ]
+
+                        delegate: Rectangle {
+                            property bool selected: (settingsVM ? settingsVM.closeAction : "") === modelData.value
+                            implicitWidth: segLabel.implicitWidth + 24
+                            height: 34
+                            radius: Theme.smallRadius
+                            color: selected ? Theme.accent : "#F0F0F2"
+                            border.color: selected ? Theme.accent : "transparent"
+
+                            Text {
+                                id: segLabel
+                                anchors.centerIn: parent
+                                text: modelData.label
+                                font.pixelSize: Theme.fontBody
+                                color: selected ? "white" : Theme.textPrimary
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    if (settingsVM)
+                                        settingsVM.closeAction = modelData.value
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Check for updates card
+        Rectangle {
+            Layout.fillWidth: true
+            radius: Theme.cardRadius
+            color: Theme.cardBackground
+            border.color: Theme.border
+            border.width: 1
+            implicitHeight: updateContent.implicitHeight + Theme.cardPadding * 2
+
+            ColumnLayout {
+                id: updateContent
+                anchors.fill: parent
+                anchors.margins: Theme.cardPadding
+                spacing: 12
+
+                Text {
+                    text: qsTr("检查更新")
+                    font.pixelSize: Theme.fontTitle
+                    font.weight: Font.DemiBold
+                    color: Theme.textPrimary
+                }
+
+                RowLayout {
+                    spacing: 16
+
+                    ColumnLayout {
+                        spacing: 4
+                        Layout.fillWidth: true
+
+                        Text {
+                            text: qsTr("当前版本：") + (settingsVM ? settingsVM.appVersion : "")
+                            font.pixelSize: Theme.fontBody
+                            color: Theme.textPrimary
+                        }
+
+                        Text {
+                            id: updateStatusText
+                            text: qsTr("尚未检查更新")
+                            font.pixelSize: Theme.fontCaption
+                            color: Theme.textSecondary
+                        }
+                    }
+
+                    // Check button
+                    Rectangle {
+                        height: 34
+                        implicitWidth: checkLabel.implicitWidth + 28
+                        radius: Theme.smallRadius
+                        color: checkArea.containsMouse ? Theme.accentHover : Theme.accent
+                        opacity: 0.5   // greyed out — not yet implemented
+
+                        Text {
+                            id: checkLabel
+                            anchors.centerIn: parent
+                            text: qsTr("检查更新")
+                            font.pixelSize: Theme.fontBody
+                            color: "white"
+                        }
+
+                        MouseArea {
+                            id: checkArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            // TODO: implement update check
+                            onClicked: {
+                                updateStatusText.text = qsTr("功能暂未开放")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // About card
         Rectangle {
             Layout.fillWidth: true
