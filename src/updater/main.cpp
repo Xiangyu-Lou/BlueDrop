@@ -6,31 +6,39 @@
 // Flow:
 //   1. Wait for the main process (PID) to exit (up to 30s)
 //   2. Extract zip to a temp directory using PowerShell
-//   3. Copy all files from the extracted subdirectory to installDir
+//   3. Copy all files from the extracted subdirectory to installDir (skips Updater.exe)
 //   4. Launch BlueDrop.exe from installDir
 //   5. Clean up temp files and exit
 
-#include <QCoreApplication>
+#include <QApplication>
 #include <QCommandLineParser>
 #include <QDateTime>
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
+#include <QFileInfo>
+#include <QLabel>
+#include <QMutex>
+#include <QMutexLocker>
 #include <QProcess>
+#include <QScreen>
 #include <QThread>
 #include <QTextStream>
+#include <QTimer>
+#include <QVBoxLayout>
+#include <QWidget>
 
 #include <windows.h>
 
+// ─── Log ────────────────────────────────────────────────────────────────────
+
 static QFile g_logFile;
+static QMutex g_logMutex;
 
 static void log(const QString& msg)
 {
+    QMutexLocker locker(&g_logMutex);
     QString line = QDateTime::currentDateTime().toString("hh:mm:ss.zzz") + " " + msg;
-    QTextStream out(stdout);
-    out << line << "\n";
-    out.flush();
-
     if (g_logFile.isOpen()) {
         QTextStream fs(&g_logFile);
         fs << line << "\n";
@@ -38,168 +46,227 @@ static void log(const QString& msg)
     }
 }
 
-static bool waitForProcess(DWORD pid, int timeoutMs)
+// ─── Worker thread ──────────────────────────────────────────────────────────
+
+class UpdateWorker : public QThread
 {
-    HANDLE h = OpenProcess(SYNCHRONIZE, FALSE, pid);
-    if (!h) {
-        // Process already gone
-        return true;
-    }
-    DWORD result = WaitForSingleObject(h, static_cast<DWORD>(timeoutMs));
-    CloseHandle(h);
-    return result == WAIT_OBJECT_0;
-}
+    Q_OBJECT
+public:
+    explicit UpdateWorker(DWORD pid, const QString& zip, const QString& dir,
+                          QObject* parent = nullptr)
+        : QThread(parent), m_pid(pid), m_zip(zip), m_dir(dir) {}
 
-static bool extractZip(const QString& zipPath, const QString& destDir)
-{
-    // Use PowerShell Expand-Archive (available on Windows 10+).
-    // Pass program and args separately so Qt does not try to parse a single
-    // command string — nested quotes in a single string are mangled on Windows.
-    QString psCmd = QString("Expand-Archive -LiteralPath '%1' -DestinationPath '%2' -Force")
-                        .arg(zipPath, destDir);
-    QStringList args = {"-NoProfile", "-NonInteractive", "-Command", psCmd};
+signals:
+    void statusChanged(const QString& text);
+    void done(bool success, const QString& errorMsg);
 
-    log("Extracting zip: " + zipPath + " -> " + destDir);
-    log("PowerShell command: " + psCmd);
+protected:
+    void run() override
+    {
+        emit statusChanged("正在等待主程序退出…");
+        log("Waiting for PID " + QString::number(m_pid));
 
-    QProcess proc;
-    proc.setProgram("powershell.exe");
-    proc.setArguments(args);
-    proc.start();
-    if (!proc.waitForFinished(120000)) {
-        log("ERROR: PowerShell timed out");
-        proc.kill();
-        return false;
-    }
-    QString psOut = proc.readAllStandardOutput().trimmed();
-    QString psErr = proc.readAllStandardError().trimmed();
-    if (!psOut.isEmpty()) log("PS stdout: " + psOut);
-    if (!psErr.isEmpty()) log("PS stderr: " + psErr);
-    int ret = proc.exitCode();
-    log("PowerShell exit code: " + QString::number(ret));
-    return ret == 0;
-}
-
-// Copy all files from srcDir into dstDir, preserving relative paths.
-// skipFile: filename (basename only) to skip — used to avoid overwriting
-// the running Updater.exe which Windows locks while the process is alive.
-static bool copyDir(const QString& srcDir, const QString& dstDir,
-                    const QString& skipFile = {})
-{
-    QDir src(srcDir);
-    QDir dst(dstDir);
-
-    QDirIterator it(srcDir, QDir::Files | QDir::Hidden,
-                    QDirIterator::Subdirectories);
-    while (it.hasNext()) {
-        it.next();
-        QString relPath = src.relativeFilePath(it.filePath());
-        QString dstPath = dst.filePath(relPath);
-
-        if (!skipFile.isEmpty() && QFileInfo(it.filePath()).fileName() == skipFile) {
-            log("Skipping (in use): " + it.filePath());
-            continue;
+        HANDLE h = OpenProcess(SYNCHRONIZE, FALSE, m_pid);
+        if (h) {
+            WaitForSingleObject(h, 30000);
+            CloseHandle(h);
         }
+        log("Main process exited");
 
-        // Ensure parent directory exists
-        QDir().mkpath(QFileInfo(dstPath).absolutePath());
+        // Extract
+        emit statusChanged("正在解压更新包…");
+        QString tempExtract = QDir::tempPath() + "/BlueDrop-update-extract";
+        QDir().mkpath(tempExtract);
 
-        // Remove existing file (can't overwrite on Windows otherwise).
-        // Retry up to 10 times with 500ms delay — Windows may hold a brief
-        // image-loader lock on BlueDrop.exe even after the process has exited.
-        bool copied = false;
-        for (int attempt = 1; attempt <= 10; ++attempt) {
-            if (QFile::exists(dstPath))
-                QFile::remove(dstPath);
+        QString psCmd = QString("Expand-Archive -LiteralPath '%1' -DestinationPath '%2' -Force")
+                            .arg(m_zip, tempExtract);
+        log("PowerShell: " + psCmd);
 
-            if (QFile::copy(it.filePath(), dstPath)) {
-                copied = true;
-                break;
+        QProcess proc;
+        proc.setProgram("powershell.exe");
+        proc.setArguments({"-NoProfile", "-NonInteractive", "-Command", psCmd});
+        proc.start();
+        if (!proc.waitForFinished(120000)) {
+            proc.kill();
+            emit done(false, "解压超时");
+            return;
+        }
+        if (proc.exitCode() != 0) {
+            QString err = proc.readAllStandardError().trimmed();
+            log("PS error: " + err);
+            emit done(false, "解压失败：" + err);
+            return;
+        }
+        log("Extraction done");
+
+        // Find subdirectory
+        QDir extractDir(tempExtract);
+        QStringList subdirs = extractDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+        if (subdirs.isEmpty()) {
+            emit done(false, "压缩包结构错误");
+            return;
+        }
+        QString sourceDir = tempExtract + "/" + subdirs.first();
+
+        // Copy files
+        emit statusChanged("正在安装新版本文件…");
+        log("Copying from " + sourceDir + " to " + m_dir);
+
+        QDir src(sourceDir);
+        QDir dst(m_dir);
+        QDirIterator it(sourceDir, QDir::Files | QDir::Hidden,
+                        QDirIterator::Subdirectories);
+        while (it.hasNext()) {
+            it.next();
+            QString relPath = src.relativeFilePath(it.filePath());
+            QString dstPath = dst.filePath(relPath);
+
+            // Skip Updater.exe — it's the currently running executable and is locked
+            if (QFileInfo(it.filePath()).fileName().compare("Updater.exe",
+                    Qt::CaseInsensitive) == 0) {
+                log("Skipping (in use): " + it.filePath());
+                continue;
             }
 
-            log(QString("Copy attempt %1 failed for %2, retrying in 500ms...")
-                    .arg(attempt).arg(dstPath));
-            QThread::msleep(500);
+            QDir().mkpath(QFileInfo(dstPath).absolutePath());
+
+            // Retry up to 10× / 500ms — Windows may briefly hold an image-loader
+            // lock on BlueDrop.exe even after the process has exited.
+            bool copied = false;
+            for (int attempt = 1; attempt <= 10; ++attempt) {
+                if (QFile::exists(dstPath))
+                    QFile::remove(dstPath);
+                if (QFile::copy(it.filePath(), dstPath)) {
+                    copied = true;
+                    break;
+                }
+                log(QString("Copy attempt %1 failed for %2").arg(attempt).arg(dstPath));
+                emit statusChanged(QString("正在安装新版本文件… (重试 %1)").arg(attempt));
+                msleep(500);
+            }
+
+            if (!copied) {
+                emit done(false, "文件复制失败：" + relPath);
+                return;
+            }
+        }
+        log("All files copied");
+
+        // Launch BlueDrop
+        emit statusChanged("正在启动新版本…");
+        QString exePath = QDir::toNativeSeparators(m_dir + "/BlueDrop.exe");
+        log("Launching: " + exePath);
+
+        if (!QProcess::startDetached(exePath, {}, m_dir)) {
+            emit done(false, "无法启动 BlueDrop.exe");
+            return;
         }
 
-        if (!copied) {
-            log("ERROR: failed to copy " + it.filePath() + " -> " + dstPath);
-            return false;
-        }
+        // Clean up
+        QDir(tempExtract).removeRecursively();
+        QFile::remove(m_zip);
+        log("Update complete");
+
+        emit done(true, {});
     }
-    return true;
+
+private:
+    DWORD   m_pid;
+    QString m_zip;
+    QString m_dir;
+};
+
+#include "main.moc"
+
+// ─── Progress window ─────────────────────────────────────────────────────────
+
+static QWidget* createWindow()
+{
+    auto* w = new QWidget(nullptr,
+        Qt::Tool | Qt::WindowStaysOnTopHint | Qt::FramelessWindowHint);
+    w->setFixedSize(340, 100);
+    w->setStyleSheet(
+        "QWidget { background: #FFFFFF; border: 1px solid #D0D0D5; border-radius: 12px; }"
+        "QLabel#title { font-size: 14px; font-weight: bold; color: #1D1D1F; border: none; }"
+        "QLabel#status { font-size: 12px; color: #6E6E73; border: none; }");
+
+    auto* layout = new QVBoxLayout(w);
+    layout->setContentsMargins(24, 18, 24, 18);
+    layout->setSpacing(8);
+
+    auto* title = new QLabel("聚音 BlueDrop 正在更新", w);
+    title->setObjectName("title");
+
+    auto* status = new QLabel("正在准备…", w);
+    status->setObjectName("status");
+    status->setWordWrap(true);
+
+    layout->addWidget(title);
+    layout->addWidget(status);
+
+    // Center on screen
+    if (auto* screen = QApplication::primaryScreen()) {
+        auto rect = screen->availableGeometry();
+        w->move(rect.center() - w->rect().center());
+    }
+
+    w->show();
+    return w;
 }
+
+// ─── main ────────────────────────────────────────────────────────────────────
 
 int main(int argc, char* argv[])
 {
-    QCoreApplication app(argc, argv);
+    QApplication app(argc, argv);
+    app.setApplicationName("BlueDrop Updater");
 
     QCommandLineParser parser;
-    parser.addOption({"pid", "PID of the main process to wait for", "pid"});
-    parser.addOption({"zip", "Path to the downloaded update zip", "zip"});
-    parser.addOption({"dir", "Installation directory to update", "dir"});
+    parser.addOption({"pid", "PID of the main process", "pid"});
+    parser.addOption({"zip", "Path to update zip", "zip"});
+    parser.addOption({"dir", "Installation directory", "dir"});
     parser.process(app);
 
-    DWORD pid = parser.value("pid").toULong();
-    QString zipPath = parser.value("zip");
+    DWORD   pid        = parser.value("pid").toULong();
+    QString zipPath    = parser.value("zip");
     QString installDir = parser.value("dir");
 
-    // Open log file in the install dir for diagnostics (visible even when console is hidden)
+    // Open log file
     g_logFile.setFileName(installDir + "/BlueDrop-updater.log");
     g_logFile.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text);
-
-    if (!pid || zipPath.isEmpty() || installDir.isEmpty()) {
-        log("Usage: Updater.exe --pid=<PID> --zip=<path> --dir=<path>");
-        return 1;
-    }
-
     log("Updater started. PID=" + QString::number(pid)
         + " zip=" + zipPath + " dir=" + installDir);
 
-    // Wait up to 30 seconds for the main app to exit
-    if (!waitForProcess(pid, 30000)) {
-        log("WARNING: timed out waiting for main process — continuing anyway");
-    }
-
-    log("Main process exited. Proceeding with update.");
-
-    // Extract zip to a unique temp directory
-    QString tempExtract = QDir::tempPath() + "/BlueDrop-update-extract";
-    QDir().mkpath(tempExtract);
-
-    if (!extractZip(zipPath, tempExtract)) {
-        log("ERROR: failed to extract zip");
+    if (!pid || zipPath.isEmpty() || installDir.isEmpty()) {
+        log("ERROR: missing arguments");
         return 1;
     }
 
-    // The zip contains a single subdirectory (e.g. BlueDrop-v0.1.5/)
-    QDir extractDir(tempExtract);
-    QStringList subdirs = extractDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-    if (subdirs.isEmpty()) {
-        log("ERROR: zip contained no subdirectory");
-        return 1;
-    }
+    // Create progress window
+    QWidget* window = createWindow();
+    auto* statusLabel = window->findChild<QLabel*>("status");
 
-    QString sourceDir = tempExtract + "/" + subdirs.first();
-    log("Copying files from " + sourceDir + " to " + installDir);
+    // Start worker
+    auto* worker = new UpdateWorker(pid, zipPath, installDir, &app);
 
-    if (!copyDir(sourceDir, installDir, "Updater.exe")) {
-        log("ERROR: file copy failed");
-        return 1;
-    }
+    QObject::connect(worker, &UpdateWorker::statusChanged,
+                     statusLabel, &QLabel::setText,
+                     Qt::QueuedConnection);
 
-    log("Files copied successfully. Launching BlueDrop...");
+    QObject::connect(worker, &UpdateWorker::done, &app,
+        [&](bool success, const QString& errorMsg) {
+            if (success) {
+                statusLabel->setText("更新完成，正在启动…");
+                QTimer::singleShot(800, &app, &QApplication::quit);
+            } else {
+                log("ERROR: " + errorMsg);
+                statusLabel->setText("更新失败：" + errorMsg);
+                // Keep window visible for 8s so user can read the error
+                QTimer::singleShot(8000, &app, &QApplication::quit);
+            }
+        }, Qt::QueuedConnection);
 
-    QString exePath = installDir + "/BlueDrop.exe";
-    if (!QProcess::startDetached(exePath, {}, installDir)) {
-        log("ERROR: failed to launch " + exePath);
-        return 1;
-    }
+    worker->start();
 
-    // Clean up temp files
-    QDir(tempExtract).removeRecursively();
-    QFile::remove(zipPath);
-
-    log("Update complete.");
-    return 0;
+    return app.exec();
 }
