@@ -81,7 +81,10 @@ static bool extractZip(const QString& zipPath, const QString& destDir)
 }
 
 // Copy all files from srcDir into dstDir, preserving relative paths.
-static bool copyDir(const QString& srcDir, const QString& dstDir)
+// skipFile: filename (basename only) to skip — used to avoid overwriting
+// the running Updater.exe which Windows locks while the process is alive.
+static bool copyDir(const QString& srcDir, const QString& dstDir,
+                    const QString& skipFile = {})
 {
     QDir src(srcDir);
     QDir dst(dstDir);
@@ -92,6 +95,11 @@ static bool copyDir(const QString& srcDir, const QString& dstDir)
         it.next();
         QString relPath = src.relativeFilePath(it.filePath());
         QString dstPath = dst.filePath(relPath);
+
+        if (!skipFile.isEmpty() && QFileInfo(it.filePath()).fileName() == skipFile) {
+            log("Skipping (in use): " + it.filePath());
+            continue;
+        }
 
         // Ensure parent directory exists
         QDir().mkpath(QFileInfo(dstPath).absolutePath());
@@ -175,7 +183,7 @@ int main(int argc, char* argv[])
     QString sourceDir = tempExtract + "/" + subdirs.first();
     log("Copying files from " + sourceDir + " to " + installDir);
 
-    if (!copyDir(sourceDir, installDir)) {
+    if (!copyDir(sourceDir, installDir, "Updater.exe")) {
         log("ERROR: file copy failed");
         return 1;
     }
