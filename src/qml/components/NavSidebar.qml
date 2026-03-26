@@ -70,6 +70,8 @@ Rectangle {
                     Text {
                         text: modelData.icon
                         font.pixelSize: 16
+                        Layout.preferredWidth: 20
+                        horizontalAlignment: Text.AlignHCenter
                         opacity: root.currentIndex === index ? 1.0 : 0.7
                     }
 
@@ -89,7 +91,7 @@ Rectangle {
         Text {
             Layout.leftMargin: 24
             Layout.bottomMargin: 20
-            text: "v0.1.1"
+            text: "v0.1.2"
             font.pixelSize: Theme.fontSmall
             color: Theme.textSecondary
         }
