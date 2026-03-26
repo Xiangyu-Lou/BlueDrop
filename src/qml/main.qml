@@ -62,12 +62,9 @@ ApplicationWindow {
         }
         function onListenToggleRequested() {
             if (!bluetoothVM) return
-            var state = bluetoothVM.connectionState
-            if (state === 3) {          // Connected → disconnect
-                bluetoothVM.disconnect()
-            } else if (state === 0) {   // Disconnected → start listening
+            if (bluetoothVM.connectionState === 0) {  // Disconnected → start
                 bluetoothVM.startListening()
-            } else {                    // WaitingPair / Connecting / Reconnecting → stop
+            } else {                                   // Any active state → stop all
                 bluetoothVM.stopListening()
             }
         }
