@@ -2,25 +2,14 @@
 
 #include <QMenu>
 #include <QAction>
-#include <QPixmap>
-#include <QPainter>
+#include <QIcon>
 
 namespace BlueDrop {
 
 TrayManager::TrayManager(QObject* parent)
     : QObject(parent)
 {
-    // Create a simple 32x32 blue circle icon
-    QPixmap pm(32, 32);
-    pm.fill(Qt::transparent);
-    QPainter p(&pm);
-    p.setRenderHint(QPainter::Antialiasing);
-    p.setBrush(QColor("#4A90D9"));
-    p.setPen(Qt::NoPen);
-    p.drawEllipse(2, 2, 28, 28);
-    p.end();
-
-    m_tray = new QSystemTrayIcon(QIcon(pm), this);
+    m_tray = new QSystemTrayIcon(QIcon(":/icons/icon.png"), this);
     m_tray->setToolTip("聚音 BlueDrop");
 
     m_menu = new QMenu();

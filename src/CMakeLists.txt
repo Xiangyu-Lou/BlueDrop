@@ -90,6 +90,17 @@ qt_add_resources(BlueDrop "fonts"
         "${CMAKE_SOURCE_DIR}/resources/fonts/NotoSansSC-Medium.ttf"
 )
 
+# Embed app icon as Qt resource (tray icon + window icon)
+qt_add_resources(BlueDrop "icons"
+    PREFIX "/icons"
+    BASE "${CMAKE_SOURCE_DIR}/resources/icons"
+    FILES
+        "${CMAKE_SOURCE_DIR}/resources/icons/icon.png"
+)
+
+# Windows exe icon (shown in Explorer / taskbar)
+target_sources(BlueDrop PRIVATE "${CMAKE_SOURCE_DIR}/resources/icons/icon.rc")
+
 target_link_libraries(BlueDrop PRIVATE
     BlueDrop_core
     Qt6::Gui

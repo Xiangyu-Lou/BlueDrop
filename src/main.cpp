@@ -3,6 +3,7 @@
 #include <QQmlContext>
 #include <QFontDatabase>
 #include <QFont>
+#include <QIcon>
 #include <QTimer>
 #include <Windows.h>
 #include <csignal>
@@ -75,6 +76,7 @@ int main(int argc, char* argv[])
     app.setApplicationDisplayName(u"聚音 BlueDrop"_s);
     app.setApplicationVersion("0.1.2");
     app.setOrganizationName("BlueDrop");
+    app.setWindowIcon(QIcon(":/icons/icon.png"));
 
     // Load embedded Noto Sans SC font
     int regularId = QFontDatabase::addApplicationFont(u":/fonts/NotoSansSC-Regular.ttf"_s);
