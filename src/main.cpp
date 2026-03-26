@@ -109,9 +109,20 @@ int main(int argc, char* argv[])
                     bluedrop.deviceEnumerator());
     SettingsVM settingsVM(bluedrop.checkResult());
 
+    // Track the default audio endpoint before BT connects, so we can detect
+    // whether Windows silently changed it during the connection handshake.
+    QString endpointBeforeConnect;
+
     // When BT connects, auto-scan for BT audio session on monitor endpoint
     QObject::connect(bluedrop.bluetooth(), &BluetoothManager::stateChanged,
         &mixerVM, [&](BluetoothConnectionState state) {
+            if (state == BluetoothConnectionState::Connecting) {
+                // Snapshot the current default endpoint before Windows touches it
+                endpointBeforeConnect = SessionVolumeController::getDefaultPlaybackEndpoint();
+                LOG_INFOF("BT connecting — saved default endpoint: %s",
+                          qPrintable(endpointBeforeConnect));
+            }
+
             if (state == BluetoothConnectionState::Connected) {
                 // Delay scan slightly to let Windows create the audio session
                 QTimer::singleShot(1500, &mixerVM, [&]() {
@@ -125,14 +136,17 @@ int main(int argc, char* argv[])
                         }
                     }
 
-                    // Re-apply the current default endpoint to force Windows to
-                    // refresh audio routing. BT connection arrival can disrupt
-                    // the audio pipeline, causing the headphone output to go
-                    // silent until the user manually switches devices.
+                    // Only restore the default endpoint if Windows changed it
+                    // during BT connection. Unconditionally re-applying it causes
+                    // AirPods to re-negotiate their BT profile (A2DP→HFP), which
+                    // produces crackling/stuttering.
                     QString currentDefault = SessionVolumeController::getDefaultPlaybackEndpoint();
-                    if (!currentDefault.isEmpty()) {
-                        LOG_INFO("Refreshing default audio endpoint to restore headphone routing");
-                        SessionVolumeController::setDefaultPlaybackEndpoint(currentDefault);
+                    if (!endpointBeforeConnect.isEmpty() &&
+                        !currentDefault.isEmpty() &&
+                        currentDefault != endpointBeforeConnect) {
+                        LOG_INFOF("Endpoint changed during BT connect (%s → %s), restoring",
+                                  qPrintable(currentDefault), qPrintable(endpointBeforeConnect));
+                        SessionVolumeController::setDefaultPlaybackEndpoint(endpointBeforeConnect);
                     }
                 });
             }
