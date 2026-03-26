@@ -173,6 +173,7 @@ ScrollView {
 
                 RowLayout {
                     spacing: 16
+                    Layout.fillWidth: true
 
                     ColumnLayout {
                         spacing: 4
@@ -185,39 +186,75 @@ ScrollView {
                         }
 
                         Text {
-                            id: updateStatusText
-                            text: qsTr("尚未检查更新")
+                            text: settingsVM ? settingsVM.updateStatusText : qsTr("尚未检查更新")
                             font.pixelSize: Theme.fontCaption
-                            color: Theme.textSecondary
+                            color: {
+                                if (!settingsVM) return Theme.textSecondary
+                                if (settingsVM.updateAvailable) return Theme.accent
+                                if (settingsVM.updateStatusText.indexOf("失败") >= 0) return Theme.error
+                                if (settingsVM.updateStatusText.indexOf("最新") >= 0) return Theme.success
+                                return Theme.textSecondary
+                            }
                         }
                     }
 
-                    // Check button
+                    // Check / Download button
                     Rectangle {
                         height: 34
-                        implicitWidth: checkLabel.implicitWidth + 28
+                        implicitWidth: updateBtnLabel.implicitWidth + 28
                         radius: Theme.smallRadius
-                        color: checkArea.containsMouse ? Theme.accentHover : Theme.accent
-                        opacity: 0.5   // greyed out — not yet implemented
+                        property bool busy: settingsVM && (settingsVM.updateChecking || settingsVM.updateDownloading)
+                        property bool showDownload: settingsVM && settingsVM.updateAvailable && !settingsVM.updateDownloading
+                        color: busy ? Theme.textSecondary
+                             : (updateBtnArea.containsMouse ? Theme.accentHover : Theme.accent)
+                        opacity: busy ? 0.5 : 1.0
 
                         Text {
-                            id: checkLabel
+                            id: updateBtnLabel
                             anchors.centerIn: parent
-                            text: qsTr("检查更新")
+                            text: {
+                                if (!settingsVM) return qsTr("检查更新")
+                                if (settingsVM.updateDownloading) return qsTr("下载中…")
+                                if (settingsVM.updateChecking) return qsTr("检查中…")
+                                if (settingsVM.updateAvailable) return qsTr("下载并更新")
+                                return qsTr("检查更新")
+                            }
                             font.pixelSize: Theme.fontBody
                             color: "white"
                         }
 
                         MouseArea {
-                            id: checkArea
+                            id: updateBtnArea
                             anchors.fill: parent
                             hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            // TODO: implement update check
+                            cursorShape: parent.busy ? Qt.ArrowCursor : Qt.PointingHandCursor
+                            enabled: !parent.busy
                             onClicked: {
-                                updateStatusText.text = qsTr("功能暂未开放")
+                                if (!settingsVM) return
+                                if (settingsVM.updateAvailable)
+                                    settingsVM.downloadAndInstall()
+                                else
+                                    settingsVM.checkForUpdates()
                             }
                         }
+                    }
+                }
+
+                // Download progress bar
+                Rectangle {
+                    Layout.fillWidth: true
+                    height: 6
+                    radius: 3
+                    color: Theme.sliderTrack
+                    visible: settingsVM && settingsVM.updateDownloading
+
+                    Rectangle {
+                        width: parent.width * (settingsVM ? settingsVM.downloadProgress / 100.0 : 0)
+                        height: parent.height
+                        radius: parent.radius
+                        color: Theme.accent
+
+                        Behavior on width { NumberAnimation { duration: 150 } }
                     }
                 }
             }

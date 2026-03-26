@@ -75,7 +75,7 @@ int main(int argc, char* argv[])
     QApplication app(argc, argv);
     app.setApplicationName("BlueDrop");
     app.setApplicationDisplayName(u"聚音 BlueDrop"_s);
-    app.setApplicationVersion("0.1.4");
+    app.setApplicationVersion("0.1.5");
     app.setOrganizationName("BlueDrop");
     app.setWindowIcon(QIcon(":/icons/icon.png"));
 
@@ -137,6 +137,10 @@ int main(int argc, char* argv[])
                 });
             }
         });
+
+    // Exit app when Updater is launched (update flow)
+    QObject::connect(&settingsVM, &SettingsVM::requestAppExit,
+                     &app, &QCoreApplication::quit);
 
     // Create system tray manager
     TrayManager trayManager;

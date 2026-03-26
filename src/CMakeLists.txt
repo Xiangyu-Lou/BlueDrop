@@ -24,6 +24,8 @@ set(BLUEDROP_CORE_SOURCES
     app/Application.cpp
     app/TrayManager.h
     app/TrayManager.cpp
+    app/UpdateChecker.h
+    app/UpdateChecker.cpp
     viewmodel/BluetoothVM.h
     viewmodel/BluetoothVM.cpp
     viewmodel/DeviceVM.h
@@ -42,6 +44,7 @@ target_include_directories(BlueDrop_core PUBLIC
 
 target_link_libraries(BlueDrop_core PUBLIC
     Qt6::Core
+    Qt6::Network
     Qt6::Widgets
     ole32
     oleaut32
@@ -120,4 +123,18 @@ endif()
 
 set_target_properties(BlueDrop PROPERTIES
     WIN32_EXECUTABLE TRUE
+)
+
+# Updater: standalone helper that replaces app files while main app is not running
+qt_add_executable(BlueDrop_Updater updater/main.cpp)
+
+target_link_libraries(BlueDrop_Updater PRIVATE Qt6::Core)
+
+if(MSVC)
+    target_compile_options(BlueDrop_Updater PRIVATE /utf-8)
+endif()
+
+set_target_properties(BlueDrop_Updater PROPERTIES
+    OUTPUT_NAME "Updater"
+    WIN32_EXECUTABLE FALSE
 )
