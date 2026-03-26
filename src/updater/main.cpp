@@ -96,11 +96,25 @@ static bool copyDir(const QString& srcDir, const QString& dstDir)
         // Ensure parent directory exists
         QDir().mkpath(QFileInfo(dstPath).absolutePath());
 
-        // Remove existing file (can't overwrite on Windows otherwise)
-        if (QFile::exists(dstPath))
-            QFile::remove(dstPath);
+        // Remove existing file (can't overwrite on Windows otherwise).
+        // Retry up to 10 times with 500ms delay — Windows may hold a brief
+        // image-loader lock on BlueDrop.exe even after the process has exited.
+        bool copied = false;
+        for (int attempt = 1; attempt <= 10; ++attempt) {
+            if (QFile::exists(dstPath))
+                QFile::remove(dstPath);
 
-        if (!QFile::copy(it.filePath(), dstPath)) {
+            if (QFile::copy(it.filePath(), dstPath)) {
+                copied = true;
+                break;
+            }
+
+            log(QString("Copy attempt %1 failed for %2, retrying in 500ms...")
+                    .arg(attempt).arg(dstPath));
+            QThread::msleep(500);
+        }
+
+        if (!copied) {
             log("ERROR: failed to copy " + it.filePath() + " -> " + dstPath);
             return false;
         }
