@@ -27,7 +27,7 @@ public:
     QString bluetoothAdapterName() const { return m_bluetoothAdapterName; }
     bool vbCableInstalled() const { return m_vbCableInstalled; }
     QString vbCableDeviceName() const { return m_vbCableDeviceName; }
-    QString appVersion() const { return "0.1.2"; }
+    QString appVersion() const { return "0.1.3"; }
 
     QString closeAction() const { return m_closeAction; }
     void setCloseAction(const QString& action);

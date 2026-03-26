@@ -74,7 +74,7 @@ int main(int argc, char* argv[])
     QApplication app(argc, argv);
     app.setApplicationName("BlueDrop");
     app.setApplicationDisplayName(u"聚音 BlueDrop"_s);
-    app.setApplicationVersion("0.1.2");
+    app.setApplicationVersion("0.1.3");
     app.setOrganizationName("BlueDrop");
     app.setWindowIcon(QIcon(":/icons/icon.png"));
 
