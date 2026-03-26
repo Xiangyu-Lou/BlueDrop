@@ -12,6 +12,7 @@
 
 #include <QCoreApplication>
 #include <QCommandLineParser>
+#include <QDateTime>
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
@@ -21,11 +22,20 @@
 
 #include <windows.h>
 
+static QFile g_logFile;
+
 static void log(const QString& msg)
 {
+    QString line = QDateTime::currentDateTime().toString("hh:mm:ss.zzz") + " " + msg;
     QTextStream out(stdout);
-    out << msg << "\n";
+    out << line << "\n";
     out.flush();
+
+    if (g_logFile.isOpen()) {
+        QTextStream fs(&g_logFile);
+        fs << line << "\n";
+        fs.flush();
+    }
 }
 
 static bool waitForProcess(DWORD pid, int timeoutMs)
@@ -42,14 +52,31 @@ static bool waitForProcess(DWORD pid, int timeoutMs)
 
 static bool extractZip(const QString& zipPath, const QString& destDir)
 {
-    // Use PowerShell Expand-Archive (available on Windows 10+)
-    QString cmd = QString(
-        "powershell -NoProfile -NonInteractive -Command "
-        "\"Expand-Archive -LiteralPath '%1' -DestinationPath '%2' -Force\""
-    ).arg(zipPath, destDir);
+    // Use PowerShell Expand-Archive (available on Windows 10+).
+    // Pass program and args separately so Qt does not try to parse a single
+    // command string — nested quotes in a single string are mangled on Windows.
+    QString psCmd = QString("Expand-Archive -LiteralPath '%1' -DestinationPath '%2' -Force")
+                        .arg(zipPath, destDir);
+    QStringList args = {"-NoProfile", "-NonInteractive", "-Command", psCmd};
 
-    log("Extracting: " + cmd);
-    int ret = QProcess::execute(cmd);
+    log("Extracting zip: " + zipPath + " -> " + destDir);
+    log("PowerShell command: " + psCmd);
+
+    QProcess proc;
+    proc.setProgram("powershell.exe");
+    proc.setArguments(args);
+    proc.start();
+    if (!proc.waitForFinished(120000)) {
+        log("ERROR: PowerShell timed out");
+        proc.kill();
+        return false;
+    }
+    QString psOut = proc.readAllStandardOutput().trimmed();
+    QString psErr = proc.readAllStandardError().trimmed();
+    if (!psOut.isEmpty()) log("PS stdout: " + psOut);
+    if (!psErr.isEmpty()) log("PS stderr: " + psErr);
+    int ret = proc.exitCode();
+    log("PowerShell exit code: " + QString::number(ret));
     return ret == 0;
 }
 
@@ -95,12 +122,17 @@ int main(int argc, char* argv[])
     QString zipPath = parser.value("zip");
     QString installDir = parser.value("dir");
 
+    // Open log file in the install dir for diagnostics (visible even when console is hidden)
+    g_logFile.setFileName(installDir + "/BlueDrop-updater.log");
+    g_logFile.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text);
+
     if (!pid || zipPath.isEmpty() || installDir.isEmpty()) {
         log("Usage: Updater.exe --pid=<PID> --zip=<path> --dir=<path>");
         return 1;
     }
 
-    log("Updater started. Waiting for PID " + QString::number(pid) + " to exit...");
+    log("Updater started. PID=" + QString::number(pid)
+        + " zip=" + zipPath + " dir=" + installDir);
 
     // Wait up to 30 seconds for the main app to exit
     if (!waitForProcess(pid, 30000)) {
