@@ -23,6 +23,10 @@ struct BluetoothManager::Impl {
     // Keep connection thread alive to maintain MTA apartment
     std::thread connectionThread;
     std::atomic<bool> disconnectRequested{false};
+    // Set true to make the connection thread call OpenAsync
+    std::atomic<bool> openAudioRequested{false};
+    // True once OpenAsync has succeeded for the current connection
+    std::atomic<bool> audioOpen{false};
     std::mutex connectionMutex;
     std::condition_variable connectionCv;
 
@@ -177,9 +181,29 @@ void BluetoothManager::disconnect()
         }
         m_impl->connection = nullptr;
     }
+    m_impl->audioOpen.store(false);
+    m_impl->openAudioRequested.store(false);
     m_connectedDeviceId.clear();
     m_connectedDeviceName.clear();
     emit deviceNameChanged({});
+}
+
+void BluetoothManager::openAudio()
+{
+    if (m_state != BluetoothConnectionState::Connected) {
+        LOG_WARNF("openAudio: not connected (state=%d), ignoring", static_cast<int>(m_state));
+        return;
+    }
+    if (m_impl->audioOpen.load()) {
+        LOG_INFO("openAudio: already open");
+        return;
+    }
+    LOG_INFO("openAudio: requesting OpenAsync on connection thread");
+    {
+        std::lock_guard<std::mutex> lk(m_impl->connectionMutex);
+        m_impl->openAudioRequested.store(true);
+    }
+    m_impl->connectionCv.notify_all();
 }
 
 void BluetoothManager::setState(BluetoothConnectionState state)
@@ -284,47 +308,72 @@ void BluetoothManager::connectToDevice(const QString& deviceId, const QString& d
 
             LOG_DEBUG("StartAsync...");
             connection.StartAsync().get();
-            LOG_DEBUG("OpenAsync...");
-            auto result = connection.OpenAsync().get();
+            LOG_INFO("StartAsync succeeded — audio endpoint not yet open");
 
-            auto status = result.Status();
-            const char* statusName = "Unknown";
-            switch (status) {
-            case winrt_audio::AudioPlaybackConnectionOpenResultStatus::Success:       statusName = "Success"; break;
-            case winrt_audio::AudioPlaybackConnectionOpenResultStatus::RequestTimedOut: statusName = "RequestTimedOut"; break;
-            case winrt_audio::AudioPlaybackConnectionOpenResultStatus::DeniedBySystem:  statusName = "DeniedBySystem"; break;
-            case winrt_audio::AudioPlaybackConnectionOpenResultStatus::UnknownFailure:  statusName = "UnknownFailure"; break;
-            }
-            LOG_INFOF("OpenAsync result: %s (%d)", statusName, static_cast<int>(status));
+            // Store the connection and report Connected state.
+            // We deliberately do NOT call OpenAsync here: keeping an A2DP audio
+            // endpoint open while idle competes for BT bandwidth with the user's
+            // AirPods (or other BT headphones), causing stuttering even when no
+            // audio is being routed. openAudio() will call OpenAsync on demand,
+            // right before Route B or Boost mode starts.
+            m_impl->connection = std::move(connection);
+            m_impl->audioOpen.store(false);
 
-            if (status == winrt_audio::AudioPlaybackConnectionOpenResultStatus::Success) {
-                m_impl->connection = std::move(connection);
-                LOG_INFO("Connection stored successfully");
+            QMetaObject::invokeMethod(this, [this, id, name]() {
+                m_connectedDeviceId = id;
+                m_connectedDeviceName = name;
+                emit deviceNameChanged(name);
+                setState(BluetoothConnectionState::Connected);
+                LOG_INFOF("Connected to: %s", qPrintable(name));
+            }, Qt::QueuedConnection);
 
-                QMetaObject::invokeMethod(this, [this, id, name]() {
-                    m_connectedDeviceId = id;
-                    m_connectedDeviceName = name;
-                    emit deviceNameChanged(name);
-                    setState(BluetoothConnectionState::Connected);
-                    LOG_INFOF("Connected to: %s", qPrintable(name));
-                }, Qt::QueuedConnection);
-
-                // Keep this thread alive to maintain the MTA apartment
-                // for the AudioPlaybackConnection object
-                LOG_DEBUG("Connection thread waiting (keeping MTA alive)...");
+            // Keep this thread alive to maintain the MTA apartment.
+            // Wait for either a disconnect request or an openAudio() call.
+            LOG_DEBUG("Connection thread waiting (keeping MTA alive)...");
+            while (!m_impl->disconnectRequested.load()) {
                 std::unique_lock<std::mutex> lock(m_impl->connectionMutex);
                 m_impl->connectionCv.wait(lock, [this]() {
-                    return m_impl->disconnectRequested.load();
+                    return m_impl->disconnectRequested.load()
+                        || m_impl->openAudioRequested.load();
                 });
-                LOG_DEBUG("Connection thread woke up, exiting");
 
-            } else {
-                LOG_WARNF("Open failed with status: %d", static_cast<int>(status));
-                connection.Close();
-                QMetaObject::invokeMethod(this, [this]() {
-                    setState(BluetoothConnectionState::WaitingPair);
-                }, Qt::QueuedConnection);
+                if (m_impl->openAudioRequested.load() && !m_impl->disconnectRequested.load()) {
+                    m_impl->openAudioRequested.store(false);
+                    lock.unlock();
+
+                    if (m_impl->audioOpen.load()) {
+                        LOG_INFO("openAudio: already open, skipping OpenAsync");
+                        continue;
+                    }
+
+                    LOG_DEBUG("OpenAsync (deferred)...");
+                    auto result = m_impl->connection.OpenAsync().get();
+
+                    auto status = result.Status();
+                    const char* statusName = "Unknown";
+                    switch (status) {
+                    case winrt_audio::AudioPlaybackConnectionOpenResultStatus::Success:
+                        statusName = "Success"; break;
+                    case winrt_audio::AudioPlaybackConnectionOpenResultStatus::RequestTimedOut:
+                        statusName = "RequestTimedOut"; break;
+                    case winrt_audio::AudioPlaybackConnectionOpenResultStatus::DeniedBySystem:
+                        statusName = "DeniedBySystem"; break;
+                    case winrt_audio::AudioPlaybackConnectionOpenResultStatus::UnknownFailure:
+                        statusName = "UnknownFailure"; break;
+                    }
+                    LOG_INFOF("OpenAsync result: %s (%d)", statusName, static_cast<int>(status));
+
+                    if (status == winrt_audio::AudioPlaybackConnectionOpenResultStatus::Success) {
+                        m_impl->audioOpen.store(true);
+                        QMetaObject::invokeMethod(this, [this]() {
+                            emit audioEndpointOpened();
+                        }, Qt::QueuedConnection);
+                    } else {
+                        LOG_WARNF("OpenAsync failed with status: %d", static_cast<int>(status));
+                    }
+                }
             }
+            LOG_DEBUG("Connection thread woke up, exiting");
 
         } catch (const winrt::hresult_error& e) {
             LOG_ERRORF("connectToDevice failed: 0x%08X", static_cast<uint32_t>(e.code()));

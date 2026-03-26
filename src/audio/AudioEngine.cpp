@@ -11,6 +11,7 @@
 #include <vector>
 
 #pragma comment(lib, "Avrt.lib")
+#pragma comment(lib, "Winmm.lib")
 
 namespace BlueDrop {
 
@@ -301,6 +302,11 @@ void AudioEngine::startBoost(const QString& captureDeviceId,
         HANDLE hTask = AvSetMmThreadCharacteristicsW(L"Pro Audio", &taskIndex);
         CoInitializeEx(nullptr, COINIT_MULTITHREADED);
 
+        // Set 1ms timer resolution so Sleep(N) sleeps N ms, not up to 15.6ms.
+        // Without this, Sleep(8) can sleep 15ms on systems with default resolution,
+        // causing the render buffer to oscillate and BT devices to underrun.
+        timeBeginPeriod(1);
+
         auto capture = std::make_unique<AudioCaptureStream>();
         auto render = std::make_unique<AudioRenderStream>();
 
@@ -342,6 +348,7 @@ void AudioEngine::startBoost(const QString& captureDeviceId,
             QMetaObject::invokeMethod(this, [this]() {
                 emit errorOccurred(QString::fromUtf8(u8"增益模式启动失败"));
             }, Qt::QueuedConnection);
+            timeEndPeriod(1);
             CoUninitialize();
             if (hTask) AvRevertMmThreadCharacteristics(hTask);
             return;
@@ -380,7 +387,7 @@ void AudioEngine::startBoost(const QString& captureDeviceId,
         // Pre-fill silence using actual render sample rate
         {
             const uint32_t renderRate = render->sampleRate() > 0 ? render->sampleRate() : 48000;
-            const size_t PREFILL_FRAMES = renderRate * 50 / 1000; // 50ms (half of 100ms buffer)
+            const size_t PREFILL_FRAMES = renderRate * 65 / 1000; // 65ms — extra cushion for BT jitter
             size_t available = render->availableFrames();
             size_t toFill = std::min(available, PREFILL_FRAMES);
             size_t written = 0;
@@ -430,7 +437,7 @@ void AudioEngine::startBoost(const QString& captureDeviceId,
                 totalWrittenFrames += static_cast<uint32_t>(written);
 
                 // Warn if render buffer is dangerously low
-                if (available < 240) { // < 5ms
+                if (available < 480) { // < 10ms — underrun risk with 8ms poll interval
                     LOG_WARNF("Boost [iter %u]: render near-empty! available=%zu frames", loopCount, available);
                 }
                 // Warn if frames were silently dropped (buffer full)
@@ -459,17 +466,34 @@ void AudioEngine::startBoost(const QString& captureDeviceId,
                           zeroCapCount);
             }
 
-            // Sleep 8ms — slightly less than the 10ms WASAPI period.
-            // With ~8ms sleep + ~7ms overhead ≈ 15ms per loop, we reliably
-            // cross at least one full 10ms capture period and always find data.
-            // Shorter sleeps (e.g. 5ms) risk polling before a period completes,
-            // getting 0 frames and leaving the render buffer underfed.
-            Sleep(8);
+            // Adaptive sleep: adjust polling rate based on render buffer occupancy.
+            // BT devices (especially AirPods) exhibit periodic flow-control bursts where
+            // they consume audio faster or slower than real-time for several seconds.
+            // Fixed-interval polling lets the buffer swing from 6% to 90% full, risking
+            // underruns. Adaptive sleep keeps occupancy in a safe 30-70% zone.
+            {
+                size_t avail = render->availableFrames();
+                uint32_t buf = render->bufferFrames();
+                // occupancy = fraction of buffer that is filled (1 - avail/buf)
+                float occupancy = buf > 0 ? 1.0f - static_cast<float>(avail) / buf : 0.5f;
+                int sleepMs;
+                if (occupancy < 0.20f) {
+                    // Buffer nearly empty — AirPods consuming fast, poll aggressively
+                    sleepMs = 3;
+                } else if (occupancy > 0.75f) {
+                    // Buffer getting full — AirPods slowing down, back off
+                    sleepMs = 12;
+                } else {
+                    sleepMs = 8; // normal
+                }
+                Sleep(static_cast<DWORD>(sleepMs));
+            }
         }
 
         capture->stop();
         render->stop();
 
+        timeEndPeriod(1);
         if (hTask) AvRevertMmThreadCharacteristics(hTask);
         CoUninitialize();
 
