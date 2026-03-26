@@ -60,8 +60,28 @@ ApplicationWindow {
             if (mixerVM && mixerVM.boostAvailable)
                 mixerVM.boostEnabled = !mixerVM.boostEnabled
         }
+        function onListenToggleRequested() {
+            if (!bluetoothVM) return
+            var state = bluetoothVM.connectionState
+            if (state === 3) {          // Connected → disconnect
+                bluetoothVM.disconnect()
+            } else if (state === 0) {   // Disconnected → start listening
+                bluetoothVM.startListening()
+            } else {                    // WaitingPair / Connecting / Reconnecting → stop
+                bluetoothVM.stopListening()
+            }
+        }
         function onExitRequested() {
             Qt.quit()
+        }
+    }
+
+    // Keep tray BT status in sync
+    Connections {
+        target: bluetoothVM
+        function onConnectionStateChanged() {
+            if (trayManager)
+                trayManager.updateBtState(bluetoothVM.statusText, bluetoothVM.connectionState)
         }
     }
 
