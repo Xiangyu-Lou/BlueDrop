@@ -35,6 +35,6 @@ if errorlevel 1 exit /b 1
 
 echo === Create ZIP ===
 cd /d F:\Project\BlueDrop\release
-powershell -Command "Compress-Archive -Path 'BlueDrop' -DestinationPath 'BlueDrop-v0.1.7-win64.zip' -Force"
+powershell -Command "Compress-Archive -Path 'BlueDrop' -DestinationPath 'BlueDrop-v0.1.6-win64.zip' -Force"
 
-echo === DONE: release\BlueDrop-v0.1.7-win64.zip ===
+echo === DONE: release\BlueDrop-v0.1.6-win64.zip ===
