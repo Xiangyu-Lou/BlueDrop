@@ -128,7 +128,7 @@ set_target_properties(BlueDrop PROPERTIES
 # Updater: standalone helper that replaces app files while main app is not running
 qt_add_executable(BlueDrop_Updater updater/main.cpp)
 
-target_link_libraries(BlueDrop_Updater PRIVATE Qt6::Core Qt6::Widgets)
+target_link_libraries(BlueDrop_Updater PRIVATE Qt6::Core)
 
 if(MSVC)
     target_compile_options(BlueDrop_Updater PRIVATE /utf-8)
