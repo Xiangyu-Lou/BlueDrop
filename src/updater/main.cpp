@@ -307,12 +307,13 @@ static void runUpdate(DWORD pid, const QString& zipPath, const QString& installD
     closeWindow();
 }
 
-// ─── WinMain ─────────────────────────────────────────────────────────────────
+// ─── main ────────────────────────────────────────────────────────────────────
+// Qt provides its own WinMain (for WIN32_EXECUTABLE) that calls main() with
+// the real argc/argv, so we use standard main() here.
 
-int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int)
+int main(int argc, char* argv[])
 {
-    int argc = 0;
-    QCoreApplication app(argc, nullptr);
+    QCoreApplication app(argc, argv);
 
     // Parse command line via Qt (handles Unicode)
     QCommandLineParser parser;
@@ -337,6 +338,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int)
     }
 
     // Show progress window on main thread
+    HINSTANCE hInst = GetModuleHandleW(nullptr);
     createProgressWindow(hInst);
 
     // Run update on background thread so the Win32 message loop stays responsive
