@@ -141,11 +141,31 @@ int main(int argc, char* argv[])
             QTimer::singleShot(500, &mixerVM, [&]() {
                 auto outputs = bluedrop.deviceEnumerator()->outputDevices();
                 auto btName = bluedrop.bluetooth()->connectedDeviceName();
-                for (const auto& dev : outputs) {
-                    if (dev.isDefault) {
-                        mixerVM.scanBtSession(dev.id, btName);
-                        break;
+
+                // First: find the endpoint whose display name matches the connected
+                // BT device. This handles Android phones (via AudioPlaybackConnection)
+                // which Windows does NOT set as the default audio device.
+                const AudioDevice* btDev = nullptr;
+                if (!btName.isEmpty()) {
+                    for (const auto& dev : outputs) {
+                        if (dev.displayName.contains(btName, Qt::CaseInsensitive)) {
+                            btDev = &dev;
+                            break;
+                        }
                     }
+                }
+                // Fallback: use the default endpoint (works for headphones/AirPods
+                // that Windows automatically promotes to default on connection).
+                if (!btDev) {
+                    for (const auto& dev : outputs) {
+                        if (dev.isDefault) {
+                            btDev = &dev;
+                            break;
+                        }
+                    }
+                }
+                if (btDev) {
+                    mixerVM.scanBtSession(btDev->id, btName);
                 }
 
                 // Only restore the default endpoint if Windows changed it

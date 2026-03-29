@@ -181,6 +181,41 @@ bool SessionVolumeController::findBluetoothSession(const QString& endpointId,
         }
     }
 
+    // Final fallback: use the first available session on this endpoint.
+    // We already know this endpoint is the BT device (caller ensures this),
+    // so any session on it is the audio we want to control. This handles
+    // Android phones via AudioPlaybackConnection which creates SWD\ endpoints
+    // without "BTHENUM"/"A2DP" identifiers in their session strings.
+    for (int i = 0; i < sessionCount; i++) {
+        ComPtr<IAudioSessionControl> sessionCtrl;
+        hr = sessionEnum->GetSession(i, sessionCtrl.GetAddressOf());
+        if (FAILED(hr)) continue;
+
+        ComPtr<IAudioSessionControl2> sessionCtrl2;
+        hr = sessionCtrl.As(&sessionCtrl2);
+        if (FAILED(hr)) continue;
+
+        DWORD pid = 0;
+        sessionCtrl2->GetProcessId(&pid);
+
+        LPWSTR displayName = nullptr;
+        sessionCtrl->GetDisplayName(&displayName);
+        QString name = displayName ? QString::fromWCharArray(displayName) : QString();
+        if (displayName) CoTaskMemFree(displayName);
+
+        ComPtr<ISimpleAudioVolume> volume;
+        hr = sessionCtrl.As(&volume);
+        if (SUCCEEDED(hr)) {
+            m_sessionVolume = volume;
+            m_sessionName = name.isEmpty() ? "Bluetooth Audio" : name;
+            m_sessionPid = pid;
+            LOG_INFO(QString("SessionVolumeController: using first session as fallback (Android): '%1' pid=%2")
+                     .arg(m_sessionName).arg(m_sessionPid));
+            emit sessionFound(m_sessionName);
+            return true;
+        }
+    }
+
     LOG_WARN("SessionVolumeController: no BT audio session found");
     return false;
 }
