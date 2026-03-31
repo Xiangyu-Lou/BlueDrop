@@ -73,16 +73,35 @@ void BluetoothManager::startListening()
     try {
         LOG_DEBUG("Getting device selector for watcher");
         auto selector = winrt_audio::AudioPlaybackConnection::GetDeviceSelector();
-        LOG_DEBUG("Creating DeviceWatcher");
-        m_impl->watcher = winrt_enum::DeviceInformation::CreateWatcher(selector);
 
-        // Device discovered
+        // Request IsConnected so we can skip paired-but-not-connected devices
+        // during initial enumeration, and detect disconnection via Updated events.
+        auto extraProps = winrt::single_threaded_vector<winrt::hstring>(
+            { L"System.Devices.Aep.IsConnected" });
+
+        LOG_DEBUG("Creating DeviceWatcher");
+        m_impl->watcher = winrt_enum::DeviceInformation::CreateWatcher(
+            selector, extraProps);
+
+        // Helper: read IsConnected from a property map.
+        // Returns true if the key is absent (unknown → assume connected for safety).
+        auto isConnected = [](const winrt::Windows::Foundation::Collections::IMapView<
+                                   winrt::hstring, winrt::Windows::Foundation::IInspectable>& props) -> bool {
+            if (!props.HasKey(L"System.Devices.Aep.IsConnected")) return true;
+            try { return winrt::unbox_value<bool>(props.Lookup(L"System.Devices.Aep.IsConnected")); }
+            catch (...) { return true; }
+        };
+
+        // Device discovered — only connect if it is actually BT-connected right now.
         m_impl->addedToken = m_impl->watcher.Added(
-            [this](const winrt_enum::DeviceWatcher&, const winrt_enum::DeviceInformation& info) {
+            [this, isConnected](const winrt_enum::DeviceWatcher&, const winrt_enum::DeviceInformation& info) {
                 try {
-                    QString id = QString::fromStdString(winrt::to_string(info.Id()));
+                    QString id   = QString::fromStdString(winrt::to_string(info.Id()));
                     QString name = QString::fromStdString(winrt::to_string(info.Name()));
-                    LOG_INFOF("Device discovered: %s (%s)", qPrintable(name), qPrintable(id));
+                    bool connected = isConnected(info.Properties());
+                    LOG_INFOF("Device discovered: %s — IsConnected=%s", qPrintable(name),
+                              connected ? "true" : "false");
+                    if (!connected) return;   // paired but not currently connected, skip
                     QMetaObject::invokeMethod(this, [this, id, name]() {
                         onDeviceAdded(id, name);
                     }, Qt::QueuedConnection);
@@ -101,15 +120,36 @@ void BluetoothManager::startListening()
                 } catch (...) { LOG_ERROR("Exception in Removed callback"); }
             });
 
-        // Updated
+        // Updated — detect IsConnected changes for live connect/disconnect tracking.
         m_impl->updatedToken = m_impl->watcher.Updated(
-            [this](const winrt_enum::DeviceWatcher&, const winrt_enum::DeviceInformationUpdate& update) {
+            [this, isConnected](const winrt_enum::DeviceWatcher&, const winrt_enum::DeviceInformationUpdate& update) {
                 try {
                     QString id = QString::fromStdString(winrt::to_string(update.Id()));
-                    LOG_DEBUGF("Device updated: %s", qPrintable(id));
-                    QMetaObject::invokeMethod(this, [this, id]() {
-                        if (m_state == BluetoothConnectionState::Reconnecting && id == m_connectedDeviceId) {
-                            connectToDevice(m_connectedDeviceId, m_connectedDeviceName);
+                    auto props = update.Properties();
+
+                    // Only act if IsConnected was part of this update
+                    if (!props.HasKey(L"System.Devices.Aep.IsConnected")) return;
+
+                    bool connected = isConnected(props);
+                    LOG_INFOF("Device updated: %s — IsConnected=%s", qPrintable(id),
+                              connected ? "true" : "false");
+
+                    QMetaObject::invokeMethod(this, [this, id, connected]() {
+                        if (connected) {
+                            // Device just became connected
+                            if ((m_state == BluetoothConnectionState::WaitingPair ||
+                                 m_state == BluetoothConnectionState::Reconnecting) &&
+                                (m_connectedDeviceId.isEmpty() || id == m_connectedDeviceId)) {
+                                connectToDevice(id, m_connectedDeviceName.isEmpty()
+                                                        ? id : m_connectedDeviceName);
+                            }
+                        } else {
+                            // Device just disconnected
+                            if (id == m_connectedDeviceId) {
+                                LOG_WARN("Connected device BT-disconnected (IsConnected→false)");
+                                disconnect();
+                                setState(BluetoothConnectionState::WaitingPair);
+                            }
                         }
                     }, Qt::QueuedConnection);
                 } catch (...) { LOG_ERROR("Exception in Updated callback"); }
