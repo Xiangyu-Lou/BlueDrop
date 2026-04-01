@@ -114,11 +114,14 @@ void MixerVM::stopEngine() {
     emit engineRunningChanged();
 }
 
-void MixerVM::scanBtSession(const QString& endpointId, const QString& deviceName) {
-    LOG_INFOF("MixerVM::scanBtSession(%s, %s)", qPrintable(endpointId), qPrintable(deviceName));
-    m_monitorDeviceId = endpointId;
+void MixerVM::scanBtSession(const QString& sessionEndpointId,
+                             const QString& monitorEndpointId,
+                             const QString& deviceName) {
+    LOG_INFOF("MixerVM::scanBtSession session=%s monitor=%s device=%s",
+              qPrintable(sessionEndpointId), qPrintable(monitorEndpointId), qPrintable(deviceName));
+    m_monitorDeviceId = monitorEndpointId;
     if (m_sessionVol) {
-        m_sessionVol->findBluetoothSession(endpointId, deviceName);
+        m_sessionVol->findBluetoothSession(sessionEndpointId, deviceName);
     }
 }
 

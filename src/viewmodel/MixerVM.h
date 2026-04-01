@@ -71,8 +71,13 @@ public:
     /// Load and apply last saved state (boost gain, volume, etc.). Call once on startup.
     Q_INVOKABLE void autoRestoreState();
 
-    /// Scan for BT audio session on the given endpoint
-    Q_INVOKABLE void scanBtSession(const QString& endpointId,
+    /// Scan for BT audio session on the given endpoint.
+    /// @param sessionEndpointId  Endpoint to scan for BT audio sessions
+    ///                           (may be the phone's named BT endpoint, or default).
+    /// @param monitorEndpointId  Endpoint used for Boost rendering (headphones/speakers).
+    /// @param deviceName         BT device name for session matching heuristics.
+    Q_INVOKABLE void scanBtSession(const QString& sessionEndpointId,
+                                    const QString& monitorEndpointId,
                                     const QString& deviceName = {});
 
 signals:

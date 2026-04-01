@@ -119,6 +119,55 @@ ScrollView {
             }
         }
 
+        // ── 后台保持说明 ──────────────────────────────────────
+        Rectangle {
+            Layout.fillWidth: true
+            radius: Theme.cardRadius
+            color: Theme.cardBackground
+            implicitHeight: persistContent.implicitHeight + Theme.cardPadding * 2
+
+            Rectangle {
+                anchors.fill: parent
+                anchors.margins: -1
+                z: -1
+                radius: Theme.cardRadius + 1
+                color: "transparent"
+                border.color: "#E0E0E4"
+                border.width: 1
+                opacity: 0.5
+            }
+
+            ColumnLayout {
+                id: persistContent
+                anchors.fill: parent
+                anchors.margins: Theme.cardPadding
+                spacing: 12
+
+                Text {
+                    text: qsTr("蓝牙连接的持久化")
+                    font.pixelSize: Theme.fontTitle
+                    font.weight: Font.DemiBold
+                    color: Theme.textPrimary
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    text: qsTr("首次通过聚音成功连接手机后，Windows 会记住该设备的 A2DP 配置。此后即使不启动聚音，手机重新连接时也能自动将音频传输到电脑。")
+                    font.pixelSize: Theme.fontBody
+                    color: Theme.textSecondary
+                    wrapMode: Text.WordWrap
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    text: qsTr("注意：聚音未运行时，音量调节、静音、增益等功能不可用。如需使用这些功能，请启动聚音并等待状态显示「已连接」。")
+                    font.pixelSize: Theme.fontBody
+                    color: Theme.warning
+                    wrapMode: Text.WordWrap
+                }
+            }
+        }
+
         // ── 增益模式说明 ──────────────────────────────────────
         Rectangle {
             Layout.fillWidth: true

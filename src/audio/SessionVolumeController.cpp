@@ -149,8 +149,12 @@ bool SessionVolumeController::findBluetoothSession(const QString& endpointId,
         }
     }
 
-    // Fallback: if only one non-system active session exists, it might be BT
-    // Or if we found no BT-specific session, try the system session (pid=0)
+    // Fallback: prefer pid=0 system session; if none, use first available session
+    // when connectedDeviceName is provided (meaning caller already selected the BT endpoint).
+    ComPtr<ISimpleAudioVolume> firstFallbackVolume;
+    QString firstFallbackName;
+    DWORD firstFallbackPid = 0;
+
     for (int i = 0; i < sessionCount; i++) {
         ComPtr<IAudioSessionControl> sessionCtrl;
         hr = sessionEnum->GetSession(i, sessionCtrl.GetAddressOf());
@@ -163,22 +167,43 @@ bool SessionVolumeController::findBluetoothSession(const QString& endpointId,
         DWORD pid = 0;
         sessionCtrl2->GetProcessId(&pid);
 
+        LPWSTR displayName = nullptr;
+        sessionCtrl->GetDisplayName(&displayName);
+        QString name = displayName ? QString::fromWCharArray(displayName) : QString();
+        if (displayName) CoTaskMemFree(displayName);
+
+        ComPtr<ISimpleAudioVolume> volume;
+        hr = sessionCtrl.As(&volume);
+        if (FAILED(hr)) continue;
+
         // System session (pid=0) is often the BT audio on the BT endpoint
         if (pid == 0) {
-            AudioSessionState state;
-            sessionCtrl->GetState(&state);
-
-            ComPtr<ISimpleAudioVolume> volume;
-            hr = sessionCtrl.As(&volume);
-            if (SUCCEEDED(hr)) {
-                m_sessionVolume = volume;
-                m_sessionName = "System Audio (likely Bluetooth)";
-                m_sessionPid = 0;
-                LOG_INFO("SessionVolumeController: using system session (pid=0) as fallback");
-                emit sessionFound(m_sessionName);
-                return true;
-            }
+            m_sessionVolume = volume;
+            m_sessionName = "System Audio (likely Bluetooth)";
+            m_sessionPid = 0;
+            LOG_INFO("SessionVolumeController: using system session (pid=0) as fallback");
+            emit sessionFound(m_sessionName);
+            return true;
         }
+
+        // Save first non-system session as last-resort fallback
+        if (!firstFallbackVolume) {
+            firstFallbackVolume = volume;
+            firstFallbackName = name;
+            firstFallbackPid = pid;
+        }
+    }
+
+    // Last resort: if caller already targeted the BT-named endpoint (connectedDeviceName
+    // provided), use the first session found there — it must be the phone's audio.
+    if (firstFallbackVolume && !connectedDeviceName.isEmpty()) {
+        m_sessionVolume = firstFallbackVolume;
+        m_sessionName = firstFallbackName.isEmpty() ? "BT Audio" : firstFallbackName;
+        m_sessionPid = firstFallbackPid;
+        LOG_INFOF("SessionVolumeController: using first session as BT audio (pid=%u name='%s')",
+                  firstFallbackPid, qPrintable(m_sessionName));
+        emit sessionFound(m_sessionName);
+        return true;
     }
 
     // Final fallback: use the first available session on this endpoint.
