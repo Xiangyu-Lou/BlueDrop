@@ -7,6 +7,9 @@
 #include <QTimer>
 #include <Windows.h>
 #include <csignal>
+#include <Audioclient.h>
+#include <mmdeviceapi.h>
+#include <wrl/client.h>
 
 #include "app/Application.h"
 #include "system/Logger.h"
@@ -47,6 +50,60 @@ static LONG WINAPI sehHandler(EXCEPTION_POINTERS* ep) {
     return EXCEPTION_CONTINUE_SEARCH;
 }
 
+// Force-initialize the audio engine on a BT render endpoint.
+// Windows lazily starts the endpoint's audio engine; without this, audio may
+// be silent until the user manually switches the output device and back.
+static void wakeUpAudioEndpoint(const QString& endpointId)
+{
+    if (endpointId.isEmpty()) return;
+
+    using Microsoft::WRL::ComPtr;
+
+    ComPtr<IMMDeviceEnumerator> enumerator;
+    HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
+                                  __uuidof(IMMDeviceEnumerator),
+                                  reinterpret_cast<void**>(enumerator.GetAddressOf()));
+    if (FAILED(hr)) {
+        LOG_ERRORF("wakeUpAudioEndpoint: CoCreateInstance failed: 0x%08X", hr);
+        return;
+    }
+
+    ComPtr<IMMDevice> device;
+    hr = enumerator->GetDevice(endpointId.toStdWString().c_str(), device.GetAddressOf());
+    if (FAILED(hr)) {
+        LOG_ERRORF("wakeUpAudioEndpoint: GetDevice failed: 0x%08X", hr);
+        return;
+    }
+
+    ComPtr<IAudioClient> audioClient;
+    hr = device->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr,
+                          reinterpret_cast<void**>(audioClient.GetAddressOf()));
+    if (FAILED(hr)) {
+        LOG_ERRORF("wakeUpAudioEndpoint: Activate IAudioClient failed: 0x%08X", hr);
+        return;
+    }
+
+    // Use the endpoint's native mix format to guarantee Initialize succeeds
+    WAVEFORMATEX* mixFmt = nullptr;
+    hr = audioClient->GetMixFormat(&mixFmt);
+    if (FAILED(hr) || !mixFmt) {
+        LOG_ERRORF("wakeUpAudioEndpoint: GetMixFormat failed: 0x%08X", hr);
+        return;
+    }
+
+    hr = audioClient->Initialize(AUDCLNT_SHAREMODE_SHARED, 0,
+                                 1000000 /* 100ms */, 0, mixFmt, nullptr);
+    CoTaskMemFree(mixFmt);
+    if (FAILED(hr)) {
+        LOG_ERRORF("wakeUpAudioEndpoint: Initialize failed: 0x%08X", hr);
+        return;
+    }
+
+    audioClient->Start();
+    audioClient->Stop();
+    LOG_INFO("wakeUpAudioEndpoint: audio engine primed");
+}
+
 int main(int argc, char* argv[])
 {
     // Enable logging if env BLUEDROP_LOG=1 or --log argument present
@@ -75,7 +132,7 @@ int main(int argc, char* argv[])
     QApplication app(argc, argv);
     app.setApplicationName("BlueDrop");
     app.setApplicationDisplayName(u"聚音 BlueDrop"_s);
-    app.setApplicationVersion("0.1.6");
+    app.setApplicationVersion("0.2.0");
     app.setOrganizationName("BlueDrop");
     app.setWindowIcon(QIcon(":/icons/icon.png"));
 
@@ -113,7 +170,36 @@ int main(int argc, char* argv[])
     // whether Windows silently changed it during the connection handshake.
     QString endpointBeforeConnect;
 
-    // Snapshot default endpoint before BT connects
+    // Scan output devices to find the phone's named BT endpoint and the PC's
+    // default output. Used both on initial connection and on lazy re-scan.
+    // Returns the phone's named BT endpoint ID (empty if not found by name).
+    auto scanBtAudioSession = [&]() -> QString {
+        auto outputs = bluedrop.deviceEnumerator()->outputDevices();
+        auto btName = bluedrop.bluetooth()->connectedDeviceName();
+
+        // AudioPlaybackConnection creates a named render endpoint for the phone.
+        // Scan that endpoint for sessions; fall back to the default endpoint.
+        QString btEndpointId;
+        QString defaultEndpointId;
+        for (const auto& dev : outputs) {
+            if (!btName.isEmpty() &&
+                dev.displayName.contains(btName, Qt::CaseInsensitive)) {
+                btEndpointId = dev.id;
+                LOG_INFOF("BT named endpoint found: '%s'", qPrintable(dev.displayName));
+            }
+            if (dev.isDefault) {
+                defaultEndpointId = dev.id;
+            }
+        }
+        QString sessionEndpointId = btEndpointId.isEmpty() ? defaultEndpointId : btEndpointId;
+        QString monitorEndpointId = defaultEndpointId;
+
+        if (!sessionEndpointId.isEmpty()) {
+            mixerVM.scanBtSession(sessionEndpointId, monitorEndpointId, btName);
+        }
+        return btEndpointId;
+    };
+
     QObject::connect(bluedrop.bluetooth(), &BluetoothManager::stateChanged,
         &mixerVM, [&](BluetoothConnectionState state) {
             if (state == BluetoothConnectionState::Connecting) {
@@ -122,60 +208,38 @@ int main(int argc, char* argv[])
                           qPrintable(endpointBeforeConnect));
             }
 
-            // When BT reconnects (e.g. after auto-reconnect), reopen the audio
-            // endpoint if audio routing was already active (Boost or Route B).
             if (state == BluetoothConnectionState::Connected) {
-                if (mixerVM.boostEnabled() || mixerVM.engineRunning()) {
-                    LOG_INFO("BT reconnected with active audio routing — reopening audio endpoint");
-                    bluedrop.bluetooth()->openAudio();
-                }
-            }
-        });
+                // Scan for BT audio session after a short delay to let Windows
+                // register the audio endpoint.
+                QTimer::singleShot(1500, &mixerVM, [&]() {
+                    QString btEndpointId = scanBtAudioSession();
+                    // Prime the BT endpoint's audio engine to prevent silent audio
+                    // on first connection (Windows lazily initializes the render pipeline).
+                    wakeUpAudioEndpoint(btEndpointId);
 
-    // After OpenAsync succeeds, scan for the BT audio session and restore the
-    // default endpoint if Windows changed it during connection.
-    // This replaces the old 1500ms timer on Connected — we now wait for the
-    // real audio endpoint to exist before scanning.
-    QObject::connect(bluedrop.bluetooth(), &BluetoothManager::audioEndpointOpened,
-        &mixerVM, [&]() {
-            QTimer::singleShot(500, &mixerVM, [&]() {
-                auto outputs = bluedrop.deviceEnumerator()->outputDevices();
-                auto btName = bluedrop.bluetooth()->connectedDeviceName();
-                for (const auto& dev : outputs) {
-                    if (dev.isDefault) {
-                        mixerVM.scanBtSession(dev.id, btName);
-                        break;
+                    // Restore default endpoint if Windows changed it during BT connection
+                    QString currentDefault = SessionVolumeController::getDefaultPlaybackEndpoint();
+                    if (!endpointBeforeConnect.isEmpty() &&
+                        !currentDefault.isEmpty() &&
+                        currentDefault != endpointBeforeConnect) {
+                        LOG_INFOF("Endpoint changed during BT connect (%s → %s), restoring",
+                                  qPrintable(currentDefault), qPrintable(endpointBeforeConnect));
+                        SessionVolumeController::setDefaultPlaybackEndpoint(endpointBeforeConnect);
                     }
-                }
-
-                // Only restore the default endpoint if Windows changed it
-                // during BT connection. Unconditionally re-applying it causes
-                // AirPods to re-negotiate their BT profile (A2DP→HFP), which
-                // produces crackling/stuttering.
-                QString currentDefault = SessionVolumeController::getDefaultPlaybackEndpoint();
-                if (!endpointBeforeConnect.isEmpty() &&
-                    !currentDefault.isEmpty() &&
-                    currentDefault != endpointBeforeConnect) {
-                    LOG_INFOF("Endpoint changed during BT connect (%s → %s), restoring",
-                              qPrintable(currentDefault), qPrintable(endpointBeforeConnect));
-                    SessionVolumeController::setDefaultPlaybackEndpoint(endpointBeforeConnect);
-                }
-            });
-        });
-
-    // Open the BT audio endpoint when audio routing becomes active.
-    // This defers OpenAsync (which creates a competing BT A2DP stream) until
-    // it is actually needed, preventing idle-time interference with AirPods.
-    QObject::connect(&mixerVM, &MixerVM::boostEnabledChanged,
-        &mixerVM, [&]() {
-            if (mixerVM.boostEnabled()) {
-                bluedrop.bluetooth()->openAudio();
+                });
             }
         });
-    QObject::connect(&mixerVM, &MixerVM::engineRunningChanged,
+
+    // Re-scan for BT audio session whenever audio devices change.
+    // This handles the case where the phone was silent at connection time
+    // (no session existed yet) and starts playing audio later.
+    QObject::connect(bluedrop.deviceEnumerator(), &DeviceEnumerator::devicesChanged,
         &mixerVM, [&]() {
-            if (mixerVM.engineRunning()) {
-                bluedrop.bluetooth()->openAudio();
+            if (bluedrop.bluetooth()->state() == BluetoothConnectionState::Connected
+                && !mixerVM.btSessionFound()) {
+                LOG_DEBUG("devicesChanged: BT connected but no session — re-scanning");
+                QString btEndpointId = scanBtAudioSession();
+                wakeUpAudioEndpoint(btEndpointId);
             }
         });
 
