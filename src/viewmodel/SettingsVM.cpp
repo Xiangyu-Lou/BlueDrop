@@ -51,7 +51,7 @@ SettingsVM::SettingsVM(const SystemCheckResult& result, QObject* parent)
     connect(m_updateChecker, &UpdateChecker::checkError,
             this, [this](const QString& msg) {
         m_updateChecking = false;
-        setUpdateStatusText(QString::fromUtf8(u8"检查失败：") + msg);
+        setUpdateStatusText(QString::fromUtf8(u8"检查更新失败，请稍后再试"));
         emit updateCheckingChanged();
         LOG_WARN(QString("UpdateChecker error: %1").arg(msg));
     });
