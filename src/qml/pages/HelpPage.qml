@@ -160,7 +160,7 @@ ScrollView {
 
                 Text {
                     Layout.fillWidth: true
-                    text: qsTr("注意：聚音未运行时，音量调节、静音、增益等功能不可用。如需使用这些功能，请启动聚音并等待状态显示「已连接」。")
+                    text: qsTr("建议每次使用时启动聚音：除了音量调节、静音、增益等功能需要聚音运行外，聚音还会在连接时主动优化音频管道初始化，避免偶发的连接后无声问题。")
                     font.pixelSize: Theme.fontBody
                     color: Theme.warning
                     wrapMode: Text.WordWrap

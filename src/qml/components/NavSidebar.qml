@@ -91,7 +91,7 @@ Rectangle {
         Text {
             Layout.leftMargin: 24
             Layout.bottomMargin: 20
-            text: "v0.1.2"
+            text: settingsVM ? ("v" + settingsVM.appVersion) : ""
             font.pixelSize: Theme.fontSmall
             color: Theme.textSecondary
         }

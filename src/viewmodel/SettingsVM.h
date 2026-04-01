@@ -3,6 +3,7 @@
 #include <QObject>
 #include <QString>
 #include <QUrl>
+#include <QCoreApplication>
 #include "app/UpdateChecker.h"
 
 namespace BlueDrop {
@@ -38,7 +39,7 @@ public:
     QString bluetoothAdapterName() const { return m_bluetoothAdapterName; }
     bool vbCableInstalled() const { return m_vbCableInstalled; }
     QString vbCableDeviceName() const { return m_vbCableDeviceName; }
-    QString appVersion() const { return "0.1.6"; }
+    QString appVersion() const { return QCoreApplication::applicationVersion(); }
 
     QString closeAction() const { return m_closeAction; }
     void setCloseAction(const QString& action);
